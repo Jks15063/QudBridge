@@ -8,7 +8,7 @@ using Newtonsoft.Json;
 namespace QudBridge
 {
     // Localhost HTTP server. Runs on its own background thread; each request is handled on the
-    // thread pool. Nothing here may touch game state directly (see milestone 4 for the dispatch queue).
+    // thread pool. Nothing here may touch game state directly: go through GameThread.Invoke.
     public static class BridgeServer
     {
         public const int Port = 15600;
@@ -131,7 +131,34 @@ namespace QudBridge
                     WriteJson(context, 200, new { status = "ok", mod = "QudBridge", version = QudBridgeMod.Version });
                     return;
                 }
+                if (path == "/debug/gamethread")
+                {
+                    if (request.HttpMethod != "GET")
+                    {
+                        WriteJson(context, 405, new { error = "method not allowed" });
+                        return;
+                    }
+                    var timer = System.Diagnostics.Stopwatch.StartNew();
+                    var body = GameThread.Invoke(() => new
+                    {
+                        thread = Thread.CurrentThread.Name,
+                        isCoreThread = XRL.Core.XRLCore.IsCoreThread,
+                        gameRunning = XRL.The.Game?.Running ?? false,
+                        turns = XRL.The.Game?.Turns,
+                        player = XRL.The.Game?.PlayerName,
+                    });
+                    WriteJson(context, 200, new { body.thread, body.isCoreThread, body.gameRunning, body.turns, body.player, ms = timer.ElapsedMilliseconds });
+                    return;
+                }
                 WriteJson(context, 404, new { error = "not found", path = request.Url.AbsolutePath });
+            }
+            catch (GameThreadUnavailableException ex)
+            {
+                WriteJson(context, 503, new { error = ex.Message });
+            }
+            catch (GameThreadTimeoutException ex)
+            {
+                WriteJson(context, 504, new { error = ex.Message });
             }
             catch (Exception ex)
             {

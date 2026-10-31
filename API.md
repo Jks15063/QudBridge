@@ -24,6 +24,28 @@ $ curl -s http://localhost:15600/
 
 `version` comes from `manifest.json`.
 
+## Game-thread requests
+
+Endpoints that read or change game state run their work on the game's core thread and wait up
+to 5 s for it to be picked up (another 5 s if it has started but not finished). The game thread only
+takes work at certain points: during normal play while waiting for your input, and inside popups,
+trade, inventory and the save picker. It does **not** take work:
+
+- while the game window is unfocused during normal play (the game sleeps until refocused),
+- on the main menu / character creation, or in menus that don't pump the game queue.
+
+In those cases the request fails with `504` instead of hanging. A request that times out before it
+starts is cancelled and never runs.
+
+## `GET /debug/gamethread`
+
+Diagnostic: runs a trivial read on the game thread and reports where it ran and how long dispatch took.
+
+```
+$ curl -s http://localhost:15600/debug/gamethread
+{"thread":"XRLCore Thread","isCoreThread":true,"gameRunning":true,"turns":1234,"player":"Mehmet","ms":18}
+```
+
 ## Errors
 
 | Status | When | Body |
@@ -31,3 +53,5 @@ $ curl -s http://localhost:15600/
 | 404 | Unknown path | `{"error":"not found","path":"/nope"}` |
 | 405 | Wrong method on a known path | `{"error":"method not allowed"}` |
 | 500 | Unhandled exception in a handler | `{"error":"<exception message>"}` |
+| 503 | Game thread hasn't started yet | `{"error":"game thread not started"}` |
+| 504 | Game thread didn't take or finish the request in time | `{"error":"game thread did not pick up the request within 5000ms (...)"}` |
