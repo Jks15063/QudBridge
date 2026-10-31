@@ -195,7 +195,12 @@ Body: a JSON object with a `type` and type-specific fields.
 | `learn` | `name` | buys a skill or power (name or class from `GET /character`) for its SP cost. Instant, no time passes |
 | `raise` | `attribute` or `mutation` | spends 1 AP on an attribute (`"Strength"` or `"str"`), or 1 MP on a mutation's rank |
 | `mutate` | — | spends 4 MP on a new mutation: returns the game's "Choose a mutation" `prompt`; answer with `choose {"option": i}` |
-| `wait` | — | `CmdWait` (one turn) |
+| `wait` | optional `turns` | `CmdWait` (one turn); with `turns`, waits that many as "Wait N Turns" does (refused with a popup if hostiles are in view) |
+| `travel` | `x`, `y` | walks to that cell of this zone by the game's pathing, as clicking the map does. Unexplored cells are fine (it explores its way there). No path: a popup "You cannot find a path to your destination." |
+| `travel` | `edge`: `N` / `S` / `E` / `W` | walks to that edge of the zone (`CmdMoveToEdge`; its direction prompt is answered for you). Another `move` off the edge enters the next zone |
+| `explore` | — | `CmdAutoExplore`. When the zone is done: popup "There doesn't seem to be anywhere else to explore." Not on the world map |
+| `rest` | — | `CmdWaitUntilHealed`; refused with a popup naming them if hostiles are in view |
+| `stop` | — | interrupts a running `travel`/`explore`/`rest`/`wait turns`. Doesn't wait for the action lock: send it while the request that started the walk is still waiting. Returns `{"result":"stopped","log":["You stop moving because you told it to."],"state":...}`; the original request then returns `ok` with the same line. `409` if nothing is running |
 | `pickup` | — | `CmdGet` (pick up what's on your cell) |
 | `stairs` | `dir`: `up` / `down` | `CmdMoveU` / `CmdMoveD`. `down` requires stairs down on your cell (or the world map); `up` off stairs on the surface goes to the world map, as `<` does in-game. |
 | `eat` / `drink` / `equip` / `unequip` | `item` or `slot` | the item's inventory action (`equip` = "equip (auto)", `unequip` = "remove") |
@@ -224,7 +229,16 @@ $ curl -s -X POST http://localhost:15600/action -d '{"type":"move","dir":"N"}'
   below); answer it with `choose`. The action itself has often already happened and the popup is
   its result message (eating, drinking).
 - `blocked`: the game is on a screen this API can't read (e.g. the inventory screen); `screen` names it.
-- `timeout`: nothing settled within 15 s.
+- `timeout`: nothing settled within 15 s (120 s for `travel`, `explore`, `rest` and `wait` with
+  `turns`). If an auto-action is still running the error says so; `stop` interrupts it.
+
+`travel`, `explore`, `rest` and `wait` with `turns` run the game's auto-actions and return once the
+whole thing is over: arrived, explored, healed, or interrupted. The game interrupts them when hostiles
+come into view; the reason is in `log` (`"You stop exploring because ..."`). They are fast:
+exploring a whole surface zone took about 5 s (40-60 turns).
+
+In `log`, runs of the same line are merged: `"You pass by a watervine. (x23)"`. If a long action
+logged more than the last 200 lines, the first entry says how many earlier ones were dropped.
 
 Unknown verbs list what's available:
 

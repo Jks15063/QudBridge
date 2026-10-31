@@ -40,11 +40,14 @@ namespace QudBridge
     public static class ActionHandler
     {
         public const int ActionTimeoutMs = 15000;
+        // Auto-actions (explore, travel, rest, long waits) run many turns; give them longer before "timeout".
+        public const int LongActionTimeoutMs = 120000;
         // How long the view must stay off "Stage" before we report the action as blocked on a popup/menu.
         public const int BlockedAfterMs = 1000;
         public const int AnsweredGraceMs = 1500;
 
         private static readonly string[] Directions = { "N", "S", "E", "W", "NE", "NW", "SE", "SW" };
+        private static readonly string[] LongActions = { "explore", "travel", "rest" };
 
         // Shortcut verbs for item actions, matched against InventoryAction.Name (see Physics.cs:2578/2605,
         // and the Food/LiquidVolume parts' AddAction calls).
@@ -106,6 +109,11 @@ namespace QudBridge
 
         public static object Handle(JObject body, int messageCount)
         {
+            if (string.Equals((string)body["type"], "stop", StringComparison.OrdinalIgnoreCase))
+            {
+                // Not under ActionLock: the request that started the auto-action is usually still waiting for it.
+                return Stop(messageCount);
+            }
             if (!Monitor.TryEnter(ActionLock))
             {
                 throw new ActionRejectedException(409, "another action is in progress");
@@ -120,6 +128,27 @@ namespace QudBridge
             }
         }
 
+        // Interrupts a running auto-action (explore, travel, rest, long wait), as any keypress does in-game.
+        // gameQueue is pumped between its steps (RenderBase), so this gets in. The request that started it then
+        // returns with the "You stop ... because you told it to." line in its log.
+        private static object Stop(int messageCount)
+        {
+            return GameThread.Invoke(() =>
+            {
+                if (The.Game == null || !The.Game.Running || The.Player == null)
+                {
+                    throw new NoGameException("no game in progress");
+                }
+                if (!AutoAct.IsActive())
+                {
+                    throw new ActionRejectedException(409, "nothing to stop: no auto-action is running");
+                }
+                long seq = MessageLog.LastSeq;
+                AutoAct.Interrupt("you told it to");
+                return new { result = "stopped", log = MessageLog.Since(seq), state = StateBuilder.Build(messageCount, includeLegend: false) };
+            });
+        }
+
         private class Started
         {
             public int BeginTurns;
@@ -130,6 +159,7 @@ namespace QudBridge
             public string AutoDirection;
             // The non-popup prompt "choose" just answered, serialized; it may still be up briefly (see Run).
             public string Answered;
+            public int TimeoutMs = ActionTimeoutMs;
         }
 
         private static Started Snapshot(long turn)
@@ -180,6 +210,10 @@ namespace QudBridge
                     RequirePlayerTurn();
                     Started s = Snapshot(The.Game.Turns);
                     s.AutoDirection = Start(type, body);
+                    if (Array.IndexOf(LongActions, type) >= 0 || (type == "wait" && body["turns"] != null))
+                    {
+                        s.TimeoutMs = LongActionTimeoutMs;
+                    }
                     return s;
                 });
             }
@@ -272,7 +306,22 @@ namespace QudBridge
                     Command("CmdReload");
                     return null;
                 case "wait":
-                    Command("CmdWait");
+                    if (body["turns"] != null)
+                    {
+                        Travel.WaitTurns(body);
+                    }
+                    else
+                    {
+                        Command("CmdWait");
+                    }
+                    return null;
+                case "explore":
+                    Travel.Explore();
+                    return null;
+                case "travel":
+                    return Travel.To(body);
+                case "rest":
+                    Travel.Rest();
                     return null;
                 case "pickup":
                     // CommandGet picks up what's here; several items opens a picker (XRLCore.cs:2163).
@@ -306,7 +355,7 @@ namespace QudBridge
                     return null;
                 default:
                     throw new ActionRejectedException(400, "unknown action type \"" + type + "\"",
-                        new { types = new[] { "move", "attack", "fire", "reload", "ability", "learn", "raise", "mutate", "wait", "pickup", "getfrom", "stairs", "eat", "drink", "equip", "unequip", "item", "talk", "choose" } });
+                        new { types = new[] { "move", "travel", "explore", "rest", "stop", "attack", "fire", "reload", "ability", "learn", "raise", "mutate", "wait", "pickup", "getfrom", "stairs", "eat", "drink", "equip", "unequip", "item", "talk", "choose" } });
             }
         }
 
@@ -582,9 +631,16 @@ namespace QudBridge
                         return Finish(started, messageCount);
                     }
                 }
-                if (timer.ElapsedMilliseconds >= ActionTimeoutMs)
+                if (timer.ElapsedMilliseconds >= started.TimeoutMs)
                 {
-                    return new { result = "timeout", screen, log = MessageLog.Since(started.MessageSeq), error = "action did not finish within " + ActionTimeoutMs + "ms" };
+                    return new
+                    {
+                        result = "timeout",
+                        screen,
+                        log = MessageLog.Since(started.MessageSeq),
+                        error = "action did not finish within " + started.TimeoutMs + "ms"
+                            + (TryGame(() => AutoAct.IsActive()) ? "; it is still running (send \"stop\" to interrupt it)" : ""),
+                    };
                 }
                 Progress.Wait(50);
                 Progress.Reset();

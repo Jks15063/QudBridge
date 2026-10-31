@@ -12,7 +12,7 @@ case "${1:-}" in
   state)
     "$CURL" -s -m 30 "$BASE/state${2:+?$2}" | python3 -m json.tool --no-ensure-ascii ;;
   act)
-    out=$("$CURL" -s -m 30 -w '\n%{http_code} %{time_total}s' -X POST "$BASE/action" -d "$2")
+    out=$("$CURL" -s -m 150 -w '\n%{http_code} %{time_total}s' -X POST "$BASE/action" -d "$2")
     echo ">> $2  -> HTTP $(tail -1 <<<"$out")"
     head -n -1 <<<"$out" | python3 -c '
 import json, sys

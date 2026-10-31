@@ -151,6 +151,9 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
   `mutate` calls `MutationsAPI.BuyRandomMutation`, whose choice popup comes back as a prompt.
 - `Abilities.cs`: ability list (as `Qud.UI/AbilityBar.cs` builds it; don't filter on `Visible`, it's off
   by default) and the `ability` action (`Command:<ability command>`, like the ability bar).
+- `Travel.cs`: `travel`/`explore`/`rest`/`wait turns`, all game auto-actions (`AutoAct.Setting`), started
+  with the same commands as the map click (`Command:CmdMoveToBorder:x,y`), sidebar and keys. `stop`
+  (in ActionHandler) bypasses the action lock and calls `AutoAct.Interrupt`.
 - `MessageLog.cs`: numbered copy of message-log lines from `XRLCore.RegisterNewMessageLogEntryCallback`,
   so a request can report the lines it caused even while the core thread is blocked.
 
@@ -187,7 +190,10 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
 6. Abilities: `abilities` in `/state` and the `ability` action (src/Abilities.cs) done, verified 2026-10-30
    (stance switch, Shield Slam with/without `dir`, cooldown error). Still missing: answering cell-target
    pickers (`target` prompt, cancel only; PickTarget's PointerOver/LeftClick mouse events look usable).
-7. Travel helpers: auto-explore (`CmdAutoExplore`), move-to point, `CmdWaitUntilHealed`.
+7. Done 2026-10-30: `travel` (x,y or edge), `explore`, `rest`, `wait` with `turns`, `stop` (src/Travel.cs;
+   the game's auto-actions). Verified: explore to "nowhere else to explore", travel 57 turns, edge,
+   wait 5, rest at full HP, stop mid-walk, errors. Untested: interruption by hostiles, rest refused by
+   hostiles, "no path" popup.
 8. Level-up: popup readable; `points` in `/state`, `GET /character`, `learn` / `raise` / `mutate`
    (src/Advancement.cs; copies the status screens' checks). Verified 2026-10-30: learn power, raise
    mutation rank, all error cases. Untested: `raise` attribute with AP, `mutate` with 4 MP (choice popup).
