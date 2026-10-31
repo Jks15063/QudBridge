@@ -190,6 +190,22 @@ namespace QudBridge
                     WriteJson(context, 200, GameThread.Invoke(() => StateBuilder.Build(messages, legend)));
                     return;
                 }
+                if (path == "/character")
+                {
+                    if (request.HttpMethod != "GET")
+                    {
+                        WriteJson(context, 405, new { error = "method not allowed" });
+                        return;
+                    }
+                    // Same fast "no game" check as /state; needs normal play because the game thread must be free.
+                    if (!(XRL.The.Game?.Running ?? false))
+                    {
+                        throw new NoGameException("no game in progress (screen: " + (GameManager.Instance?.CurrentGameView ?? "unknown") + ")");
+                    }
+                    bool details = request.QueryString["details"] == "1";
+                    WriteJson(context, 200, GameThread.Invoke(() => Advancement.Describe(details)));
+                    return;
+                }
                 if (path == "/action")
                 {
                     if (request.HttpMethod != "POST")

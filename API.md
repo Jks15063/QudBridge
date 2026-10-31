@@ -83,6 +83,7 @@ $ curl -s 'http://localhost:15600/state?messages=3'
 - `screen`: the game's current view (`GameManager.CurrentGameView`). `"Stage"` is normal play; other
   values are menus/popups (e.g. `PopupMessage`, `ModernTrade`, `Looker`).
 - `player.hp`/`maxHp`: exact. `stats`: attributes plus `av`/`dv`, `qn` (quickness), `ms` (move speed).
+  `points`: unspent `sp` (skill), `ap` (attribute), `mp` (mutation) points; see [`GET /character`](#get-character).
   `effects`: active effect descriptions, with remaining turns in parentheses when finite.
 - Coordinates are zone cells, `x` 0–79 left→right, `y` 0–24 top→bottom. `dist` is in moves
   (diagonals count as 1).
@@ -134,6 +135,40 @@ Use `stairs` `down` to enter the zone you're standing on.
 
 Returns `409 {"error":"no game in progress (screen: MainMenu)"}` when no game is loaded.
 
+## `GET /character`
+
+Character advancement: unspent points, base attributes, mutations and the skill tree. Spend
+points with the `learn`, `raise` and `mutate` actions. The game only spends points from its
+status screens, which this API can't read, so `learn` and `raise` repeat those screens' checks
+(`XRL.UI/SkillsAndPowersScreen.cs` `SelectNode`, `XRL.UI/StatusScreen.cs` `BuyStat` /
+`ShowMutationPopup`) and skip their "Are you sure?" popups. `mutate` uses the game's own code.
+
+`?details=1` adds `desc` to skills, powers and mutations.
+
+```
+$ curl -s http://127.0.0.1:15600/character
+{"points":{"sp":78,"ap":0,"mp":1},
+ "attributes":{"Strength":16,"Agility":22,"Toughness":18,"Intelligence":17,"Willpower":16,"Ego":16},
+ "canMutate":true,
+ "mutations":[{"name":"Beak","rank":1,"baseRank":1},{"name":"Wings","rank":1,"baseRank":1,"canRaise":true}, ...],
+ "skills":[{"name":"Axe","cost":50,"canLearn":true,"powers":[{"name":"Cleave","cost":...,
+   "why":"requires the Axe skill (50 SP) first"}, ...]},
+  {"name":"Pistol","cost":100,"owned":true,"powers":[{"name":"Steady Hand","cost":0,"owned":true},
+   {"name":"Sling and Run","cost":50,"canLearn":true}, ...]}, ...]}
+```
+
+`owned` / `canLearn` / `canRaise` are present only when true. `why` says why something can't be
+learned now (not enough SP, needs its skill first, attribute requirements, initiation only).
+Powers with cost `0` come free with their skill. `rank` is the mutation's effective rank, `baseRank`
+the bought one. `canMutate` is false for creatures that can't buy mutations (e.g. true kin).
+
+```
+$ curl -s -X POST http://127.0.0.1:15600/action -d '{"type":"learn","name":"Sling and Run"}'
+{"result":"ok","turns":0,"log":["You learn Sling and Run for 50 SP."],"state":{...}}
+$ curl -s -X POST http://127.0.0.1:15600/action -d '{"type":"learn","name":"Dead Shot"}'
+{"error":"costs 200 SP; you have 28"}
+```
+
 ## `POST /action`
 
 Performs one player action, waits until it is the player's turn again (other creatures have acted),
@@ -147,6 +182,9 @@ Body: a JSON object with a `type` and type-specific fields.
 | `attack` | `dir` | `CmdAttack<dir>`. `409` if there's nothing there you can hit (`"nothing to attack there"`, or a flying creature: `"can't reach ... it is flying"`); the game itself would do nothing silently |
 | `fire` | `x`, `y` | fires your equipped missile weapons at that cell (`Combat.FireMissileWeapon` with the target, so the game's targeting screen never opens). Every ready weapon fires. `409` with no missile weapon or `"you need to reload"`. Misses often log nothing; the target's `health` in `state` shows the effect |
 | `reload` | — | `CmdReload`: reloads missile weapons from inventory ammo |
+| `learn` | `name` | buys a skill or power (name or class from `GET /character`) for its SP cost. Instant, no time passes |
+| `raise` | `attribute` or `mutation` | spends 1 AP on an attribute (`"Strength"` or `"str"`), or 1 MP on a mutation's rank |
+| `mutate` | — | spends 4 MP on a new mutation: returns the game's "Choose a mutation" `prompt`; answer with `choose {"option": i}` |
 | `wait` | — | `CmdWait` (one turn) |
 | `pickup` | — | `CmdGet` (pick up what's on your cell) |
 | `stairs` | `dir`: `up` / `down` | `CmdMoveU` / `CmdMoveD`. `down` requires stairs down on your cell (or the world map); `up` off stairs on the surface goes to the world map, as `<` does in-game. |

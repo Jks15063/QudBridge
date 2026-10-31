@@ -244,6 +244,24 @@ namespace QudBridge
                 case "fire":
                     Fire(body);
                     return null;
+                case "learn":
+                    // Instant, no popups (Advancement.cs); mark the action done right away.
+                    Advancement.Learn(body);
+                    MarkReadyIfPlayerCanAct();
+                    return null;
+                case "raise":
+                    Advancement.Raise(body);
+                    MarkReadyIfPlayerCanAct();
+                    return null;
+                case "mutate":
+                    Advancement.CheckMutate();
+                    // Opens the game's "Choose a mutation" popup; Settle reports it as a prompt.
+                    GameThread.Post(() =>
+                    {
+                        Advancement.Mutate();
+                        MarkReadyIfPlayerCanAct();
+                    });
+                    return null;
                 case "reload":
                     // CommandReloadEvent (XRLCore.cs:2225); "nothing to reload" etc. show up in the log.
                     Command("CmdReload");
@@ -283,7 +301,7 @@ namespace QudBridge
                     return null;
                 default:
                     throw new ActionRejectedException(400, "unknown action type \"" + type + "\"",
-                        new { types = new[] { "move", "attack", "fire", "reload", "wait", "pickup", "getfrom", "stairs", "eat", "drink", "equip", "unequip", "item", "talk", "choose" } });
+                        new { types = new[] { "move", "attack", "fire", "reload", "learn", "raise", "mutate", "wait", "pickup", "getfrom", "stairs", "eat", "drink", "equip", "unequip", "item", "talk", "choose" } });
             }
         }
 

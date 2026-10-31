@@ -145,6 +145,9 @@ background pins a CPU core). The test save is a level-1 character "Mamower" in J
 - `PopupBridge.cs`: prompts on the UI thread: `PopupMessage` (popups, conversations, number/text
   input), the direction picker (answered by pushing keypad keys, as the on-screen control panel
   does), and `PickGameObjectScreen` (item picker). `TradeBridge.cs`: `TradeScreen`.
+- `Advancement.cs`: `GET /character` and the `learn` / `raise` / `mutate` actions. Status screens are
+  unreadable, so it repeats their checks (`SelectNode`, `BuyStat`, `ShowMutationPopup`) without popups;
+  `mutate` calls `MutationsAPI.BuyRandomMutation`, whose choice popup comes back as a prompt.
 - `MessageLog.cs`: numbered copy of message-log lines from `XRLCore.RegisterNewMessageLogEntryCallback`,
   so a request can report the lines it caused even while the core thread is blocked.
 
@@ -175,9 +178,9 @@ background pins a CPU core). The test save is a level-1 character "Mamower" in J
 6. Activated abilities/mutations: send `Command:<ability command>` like the ability bar
    (`Qud.UI/AbilityBarButton.cs:91`); list abilities and cooldowns in `/state`.
 7. Travel helpers: auto-explore (`CmdAutoExplore`), move-to point, `CmdWaitUntilHealed`.
-8. Level-up: the "You have gained a level!" popup is readable and dismissable (verified 2026-10-30, level 2).
-   Missing: unspent skill/mutation/attribute points in `/state`, and a way to spend them (status
-   screens are unreadable).
+8. Level-up: popup readable; `points` in `/state`, `GET /character`, `learn` / `raise` / `mutate`
+   (src/Advancement.cs; copies the status screens' checks). Verified 2026-10-30: learn power, raise
+   mutation rank, all error cases. Untested: `raise` attribute with AP, `mutate` with 4 MP (choice popup).
 9. Other unreadable screens: books, terminals, tinkering, gamepad `AskNumberScreen`.
 10. Look/examine descriptions of creatures and items.
 11. `/state` size (~5 KB, mostly the 80x25 map): an option for a window around the player.
