@@ -2,7 +2,7 @@
 
 Base URL: `http://localhost:15600` (loopback only; also reachable as `http://127.0.0.1:15600`).
 
-From WSL (NAT networking), use Windows' curl: `/mnt/c/Windows/System32/curl.exe`.
+From WSL: with mirrored networking plain `curl` works; with NAT networking use Windows' curl, `/mnt/c/Windows/System32/curl.exe`. `tools/bridge.sh` picks whichever works.
 
 POST requests must send a `Content-Length` (use `-d ''` for an empty body); Mono's `HttpListener`
 rejects bodyless POSTs with `411 Length Required` before the mod sees them.
