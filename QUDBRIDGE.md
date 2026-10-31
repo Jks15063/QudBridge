@@ -159,6 +159,12 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
 
 ### Gotchas learned the hard way
 
+- Actions run as their own gameQueue task (items, fire, throw, mutate, wait N) go through
+  `ActionHandler.Posted`, which sets `Busy` until they return. The game pumps gameQueue in the middle of
+  them (projectile animations), so without it Settle finished a throw after the replacement torch was
+  equipped but before the throw spent its energy (`turns: 0`, stale state). Busy is cleared at the start
+  of every player turn in case a posted task never ran.
+
 - Mono `HttpListener`: `Close()` leaves `IsListening` true (accept loop must exit on
   `ObjectDisposedException`); a bodyless POST gets `411` before the handler runs.
 - zsh here has `noclobber` (use `>|`), `rm` is aliased to `rm -i` (use `command rm -f`), quote globs
@@ -186,10 +192,12 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
 4. Untested paths (`choose {"dir":...}` on a direction prompt now verified via Shield Slam): `getfrom` on a container
    (Joppa chests are villagers' property, so taking is stealing), trade `offer`, storing into a container.
 5. Ranged combat: `fire {x,y}` and `reload` done (verified 2026-10-30; target passed straight to
-   `Combat.FireMissileWeapon`, no picker). Still missing: `throw`, and abilities that open `PickTarget`.
+   `Combat.FireMissileWeapon`, no picker). `throw {x,y}` done 2026-10-30 (`Combat.ThrowWeapon` with
+   the target; verified with torches, 1 turn each).
 6. Abilities: `abilities` in `/state` and the `ability` action (src/Abilities.cs) done, verified 2026-10-30
-   (stance switch, Shield Slam with/without `dir`, cooldown error). Still missing: answering cell-target
-   pickers (`target` prompt, cancel only; PickTarget's PointerOver/LeftClick mouse events look usable).
+   (stance switch, Shield Slam with/without `dir`, cooldown error). Cell pickers: `choose {x,y}` done
+   2026-10-30 (PointerOver x2 + LeftClick; verified on "Move to Square", Ctrl+Enter). Untested on a
+   real ability (Charge etc.); `PickField` (multi-cell) is cancel-only.
 7. Done 2026-10-30: `travel` (x,y or edge), `explore`, `rest`, `wait` with `turns`, `stop` (src/Travel.cs;
    the game's auto-actions). Verified: explore to "nowhere else to explore", travel 57 turns, edge,
    wait 5, rest at full HP, stop mid-walk, errors. Untested: interruption by hostiles, rest refused by

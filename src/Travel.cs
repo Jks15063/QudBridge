@@ -91,7 +91,7 @@ namespace QudBridge
                 Keyboard.PushMouseEvent("Command:CmdWait");
                 return;
             }
-            GameThread.Post(() =>
+            ActionHandler.Posted(() =>
             {
                 if (!AutoAct.ShouldHostilesInterrupt(".", null, logSpot: false, popSpot: true))
                 {

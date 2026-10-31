@@ -190,6 +190,7 @@ Body: a JSON object with a `type` and type-specific fields.
 | `move` | `dir` | `CmdMove<dir>` (moving into a hostile attacks it, as in-game) |
 | `attack` | `dir` | `CmdAttack<dir>`. `409` if there's nothing there you can hit (`"nothing to attack there"`, or a flying creature: `"can't reach ... it is flying"`); the game itself would do nothing silently |
 | `fire` | `x`, `y` | fires your equipped missile weapons at that cell (`Combat.FireMissileWeapon` with the target, so the game's targeting screen never opens). Every ready weapon fires. `409` with no missile weapon or `"you need to reload"`. Misses often log nothing; the target's `health` in `state` shows the effect |
+| `throw` | `x`, `y` | throws what's in the Thrown Weapon slot at that cell (`Combat.ThrowWeapon` with the target, no targeting screen). The next one of a stack is equipped automatically ("You equip the torch."). Throws can fall short. `409` if the slot is empty: put something there with `item` verb `"equip (manual)"` and choose the "Thrown Weapon" option |
 | `reload` | — | `CmdReload`: reloads missile weapons from inventory ammo |
 | `ability` | `name`, optional `dir` | uses an ability by its `name` from `state.player.abilities` (or its command), as the ability bar does. If it asks "which direction?" it's answered with `dir`; without `dir` that comes back as a `direction` prompt. `409` with the game's message while cooling down ("You must wait 38 rounds before using Shield Slam."). Abilities that pick a cell return a `target` prompt that can only be cancelled for now |
 | `learn` | `name` | buys a skill or power (name or class from `GET /character`) for its SP cost. Instant, no time passes |
@@ -297,8 +298,16 @@ $ curl -s -X POST http://localhost:15600/action -d '{"type":"choose","option":5}
 
 ### `kind: "target"`
 
-A cell picker (abilities like Charge, throwing). Picking a cell isn't supported yet; cancel with
-`{"button":"cancel"}`. `fire` takes its target directly and never shows this.
+A cell picker (abilities like Charge, the game's "Move to Square"). Answer with the cell:
+
+```
+{"type":"choose","x":60,"y":18}
+```
+
+or cancel with `{"button":"cancel"}`. The game's own checks still apply: a cell it won't accept
+("You may only select a visible square!") comes back as a popup, then the picker again. Pickers
+with `mode: "PickField"` (several cells) can only be cancelled. `fire` and `throw` take their
+target directly and never show this.
 
 ### `kind: "direction"`
 

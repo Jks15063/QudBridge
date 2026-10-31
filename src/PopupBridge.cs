@@ -159,8 +159,7 @@ namespace QudBridge
             }
             if (IsTargetPrompt())
             {
-                // Cell pickers (abilities like Charge, throwing): reported so the client sees what's asked; picking
-                // a cell isn't supported yet, only cancelling.
+                // Cell pickers (abilities like Charge, throwing): answer with choose {"x","y"} or cancel.
                 return new { kind = "target", text = Text(PickTargetWindow.currentText), mode = PickTargetWindow.currentMode.ToString(), buttons = new[] { "cancel" } };
             }
             // A popup can sit on top of the picker (e.g. during "take all"), so it wins.
@@ -214,6 +213,33 @@ namespace QudBridge
             };
         }
 
+        // A cell picker (PickTarget.ShowPicker, XRL.UI/PickTarget.cs:378) answered the way the mouse does: PointerOver
+        // moves its cursor (GameManager.cs:1190) and LeftClick selects (PickTarget.cs:965). The picker ignores the
+        // first PointerOver it sees (flag3, PickTarget.cs:402/794), so send it twice. Its own checks still apply
+        // ("You may only select a visible square!" comes back as a popup, then the picker again).
+        // PickField (several cells, e.g. walls) isn't supported.
+        private static string ChooseCell(JObject body)
+        {
+            if (PickTargetWindow.currentMode != PickTargetWindow.TargetMode.PickCells)
+            {
+                throw new ActionRejectedException(409, "this picker selects several cells (" + PickTargetWindow.currentMode + "), which isn't supported; cancel with {\"button\":\"cancel\"}");
+            }
+            JToken jx = body["x"], jy = body["y"];
+            if (jx == null || jy == null || jx.Type != JTokenType.Integer || jy.Type != JTokenType.Integer)
+            {
+                throw new ActionRejectedException(400, "give the target cell as \"x\" and \"y\", or cancel with {\"button\":\"cancel\"}");
+            }
+            int x = (int)jx, y = (int)jy;
+            if (x < 0 || y < 0 || x >= 80 || y >= 25)
+            {
+                throw new ActionRejectedException(400, "(" + x + "," + y + ") is outside the map");
+            }
+            ConsoleLib.Console.Keyboard.PushMouseEvent("PointerOver", x, y);
+            ConsoleLib.Console.Keyboard.PushMouseEvent("PointerOver", x, y);
+            ConsoleLib.Console.Keyboard.PushMouseEvent("LeftClick", x, y);
+            return "cell " + x + "," + y;
+        }
+
         // Answer the top popup the way input would. Returns a short description of what was chosen.
         public static string Choose(JObject body)
         {
@@ -225,12 +251,12 @@ namespace QudBridge
             }
             if (IsTargetPrompt())
             {
-                if ((string)body["button"] != "cancel" && !string.Equals((string)body["dir"], "cancel", StringComparison.OrdinalIgnoreCase))
+                if ((string)body["button"] == "cancel" || string.Equals((string)body["dir"], "cancel", StringComparison.OrdinalIgnoreCase))
                 {
-                    throw new ActionRejectedException(409, "picking a target cell isn't supported yet; cancel with {\"button\":\"cancel\"}");
+                    ConsoleLib.Console.Keyboard.PushKey(new ConsoleLib.Console.Keyboard.XRLKeyEvent(UnityEngine.KeyCode.Escape));
+                    return "cancel target";
                 }
-                ConsoleLib.Console.Keyboard.PushKey(new ConsoleLib.Console.Keyboard.XRLKeyEvent(UnityEngine.KeyCode.Escape));
-                return "cancel target";
+                return ChooseCell(body);
             }
             PopupMessage p = Top();
             if (p == null)

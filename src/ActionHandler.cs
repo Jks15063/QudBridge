@@ -80,6 +80,9 @@ namespace QudBridge
             XRLCore.RegisterOnBeginPlayerTurnCallback(core =>
             {
                 Interlocked.Exchange(ref LastTurn, The.Game?.Turns ?? 0);
+                // Posted actions run inside PlayerTurn's input wait, so none can be running at the start of a turn;
+                // clearing here keeps one that never ran (game ended, queue dropped) from blocking Settle forever.
+                Interlocked.Exchange(ref Busy, 0);
                 if (AutoAct.IsActive() || core.HPWarning)
                 {
                     Progress.Set();
@@ -95,6 +98,31 @@ namespace QudBridge
             // "Single" end-of-turn callbacks run only when PlayerTurn just processed a command (the if (flag)
             // block, XRLCore.cs:2396). If the player can still act, the command took no time.
             XRLCore.RegisterOnEndPlayerTurnCallback(_ => MarkReadyIfPlayerCanAct(), Single: true);
+        }
+
+        // Posted actions still running (see Posted). Settle ignores turn/ready signals while this is non-zero.
+        private static int Busy;
+
+        // Runs an action as its own gameQueue task, then marks it done if it took no time. Used for anything that
+        // may open a popup (the HTTP side watches the view rather than blocking on it). While it runs the game
+        // keeps pumping gameQueue (projectile animations, RenderBase), so Settle's probes and other hooks can run
+        // in the middle of it: a throw used to be reported done after the replacement torch was equipped but
+        // before the throw spent its energy. Busy makes Settle wait for the end.
+        public static void Posted(Action work)
+        {
+            Interlocked.Increment(ref Busy);
+            GameThread.Post(() =>
+            {
+                try
+                {
+                    work();
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref Busy);
+                }
+                MarkReadyIfPlayerCanAct();
+            });
         }
 
         private static void MarkReadyIfPlayerCanAct()
@@ -238,7 +266,7 @@ namespace QudBridge
         // On the game thread: is the player back in normal play with a turn to take?
         private static bool IsPlayerReady()
         {
-            return The.Game != null && The.Game.Running && The.Player != null
+            return Volatile.Read(ref Busy) == 0 && The.Game != null && The.Game.Running && The.Player != null
                 && GameManager.Instance.CurrentGameView == Options.StageViewID
                 && !AutoAct.IsActive() && The.Player.Energy.Value >= 1000;
         }
@@ -280,6 +308,9 @@ namespace QudBridge
                 case "fire":
                     Fire(body);
                     return null;
+                case "throw":
+                    Throw(body);
+                    return null;
                 case "ability":
                     // Like the ability bar; a "which direction?" prompt is answered with "dir" if given.
                     return Abilities.Use(body);
@@ -295,10 +326,9 @@ namespace QudBridge
                 case "mutate":
                     Advancement.CheckMutate();
                     // Opens the game's "Choose a mutation" popup; Settle reports it as a prompt.
-                    GameThread.Post(() =>
+                    Posted(() =>
                     {
                         Advancement.Mutate();
-                        MarkReadyIfPlayerCanAct();
                     });
                     return null;
                 case "reload":
@@ -355,7 +385,7 @@ namespace QudBridge
                     return null;
                 default:
                     throw new ActionRejectedException(400, "unknown action type \"" + type + "\"",
-                        new { types = new[] { "move", "travel", "explore", "rest", "stop", "attack", "fire", "reload", "ability", "learn", "raise", "mutate", "wait", "pickup", "getfrom", "stairs", "eat", "drink", "equip", "unequip", "item", "talk", "choose" } });
+                        new { types = new[] { "move", "travel", "explore", "rest", "stop", "attack", "fire", "throw", "reload", "ability", "learn", "raise", "mutate", "wait", "pickup", "getfrom", "stairs", "eat", "drink", "equip", "unequip", "item", "talk", "choose" } });
             }
         }
 
@@ -386,25 +416,7 @@ namespace QudBridge
         private static void Fire(JObject body)
         {
             GameObject player = The.Player;
-            JToken jx = body["x"], jy = body["y"];
-            if (jx == null || jy == null || jx.Type != JTokenType.Integer || jy.Type != JTokenType.Integer)
-            {
-                throw new ActionRejectedException(400, "give the target cell as \"x\" and \"y\" (e.g. a creature's position from state.creatures)");
-            }
-            Zone zone = player.CurrentZone;
-            if (zone == null || zone.IsWorldMap())
-            {
-                throw new ActionRejectedException(409, "cannot fire on the world map");
-            }
-            Cell target = zone.GetCell((int)jx, (int)jy);
-            if (target == null)
-            {
-                throw new ActionRejectedException(400, "(" + jx + "," + jy + ") is outside the map");
-            }
-            if (target == player.CurrentCell)
-            {
-                throw new ActionRejectedException(400, "that's your own cell");
-            }
+            Cell target = TargetCell(body, "fire");
             List<GameObject> weapons = player.GetMissileWeapons();
             bool any = false, ready = false;
             string notReady = null;
@@ -430,10 +442,51 @@ namespace QudBridge
                 throw new ActionRejectedException(409, StateBuilder.Clean(notReady ?? "you need to reload") + " (use \"reload\")");
             }
             // Own task, like item actions: firing can raise popups (e.g. confirming an attack on a neutral).
-            GameThread.Post(() =>
+            Posted(() =>
             {
                 Combat.FireMissileWeapon(player, null, target);
-                MarkReadyIfPlayerCanAct();
+            });
+        }
+
+        // The cell given as "x","y" for fire/throw, in the player's zone.
+        private static Cell TargetCell(JObject body, string verb)
+        {
+            GameObject player = The.Player;
+            JToken jx = body["x"], jy = body["y"];
+            if (jx == null || jy == null || jx.Type != JTokenType.Integer || jy.Type != JTokenType.Integer)
+            {
+                throw new ActionRejectedException(400, "give the target cell as \"x\" and \"y\" (e.g. a creature's position from state.creatures)");
+            }
+            Zone zone = player.CurrentZone;
+            if (zone == null || zone.IsWorldMap())
+            {
+                throw new ActionRejectedException(409, "cannot " + verb + " on the world map");
+            }
+            Cell target = zone.GetCell((int)jx, (int)jy);
+            if (target == null)
+            {
+                throw new ActionRejectedException(400, "(" + jx + "," + jy + ") is outside the map");
+            }
+            if (target == player.CurrentCell)
+            {
+                throw new ActionRejectedException(400, "that's your own cell");
+            }
+            return target;
+        }
+
+        // Throws the item in the Thrown Weapon slot at a cell, as CmdThrow does (XRLCore.cs:1856) but with the target
+        // given, which skips its targeting screen (Combat.ThrowWeapon with TargetCell, Combat.cs:214).
+        private static void Throw(JObject body)
+        {
+            GameObject player = The.Player;
+            Cell target = TargetCell(body, "throw");
+            if (player.GetThrownWeapons().IsNullOrEmpty())
+            {
+                throw new ActionRejectedException(409, "nothing in the Thrown Weapon slot (equip something there with item verb \"equip (manual)\")");
+            }
+            Posted(() =>
+            {
+                Combat.ThrowWeapon(player, null, target);
             });
         }
 
@@ -500,10 +553,9 @@ namespace QudBridge
             }
             // Run it as its own queued task rather than inside this Invoke: it may open a popup, and the HTTP
             // side detects that by watching the view instead of blocking on this call.
-            GameThread.Post(() =>
+            Posted(() =>
             {
                 action.Process(item, player);
-                MarkReadyIfPlayerCanAct();
             });
         }
 
@@ -576,7 +628,16 @@ namespace QudBridge
             long unreadableSince = -1;
             while (true)
             {
-                if (Volatile.Read(ref BeginTurns) != started.BeginTurns || Volatile.Read(ref ReadyMarks) != started.ReadyMarks)
+                // Counters first, then Busy: a posted action decrements Busy before its own ready mark, so a mark
+                // read here while Busy is still set can only come from the middle of the action.
+                int beginTurns = Volatile.Read(ref BeginTurns), readyMarks = Volatile.Read(ref ReadyMarks);
+                bool busy = Volatile.Read(ref Busy) > 0;
+                if (busy)
+                {
+                    started.BeginTurns = beginTurns;
+                    started.ReadyMarks = readyMarks;
+                }
+                else if (beginTurns != started.BeginTurns || readyMarks != started.ReadyMarks)
                 {
                     return Finish(started, messageCount);
                 }
@@ -626,7 +687,7 @@ namespace QudBridge
                 else
                 {
                     unreadableSince = -1;
-                    if (timer.ElapsedMilliseconds >= 100 && TryGame(IsPlayerReady))
+                    if (!busy && timer.ElapsedMilliseconds >= 100 && TryGame(IsPlayerReady))
                     {
                         return Finish(started, messageCount);
                     }
