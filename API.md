@@ -154,12 +154,14 @@ $ curl -s http://127.0.0.1:15600/character
  "skills":[{"name":"Axe","cost":50,"canLearn":true,"powers":[{"name":"Cleave","cost":...,
    "why":"requires the Axe skill (50 SP) first"}, ...]},
   {"name":"Pistol","cost":100,"owned":true,"powers":[{"name":"Steady Hand","cost":0,"owned":true},
-   {"name":"Sling and Run","cost":50,"canLearn":true,"requires":"Agility 15"}, ...]}, ...]}
+   {"name":"Sling and Run","cost":50,"canLearn":true}, ...]}, ...]}
 ```
 
 `owned` / `canLearn` / `canRaise` are present only when true. `requires` (on anything not owned)
 lists all requirements whether met or not, as the skills screen does: attribute minimums
 (`"Strength 23"`; `" or "` between alternatives), `needs <skill or mutation>`, `not with <...>`.
+Example (level-2 true kin, 44 SP, Strength 22):
+`{"name":"Improved Aggressive Stance","cost":100,"why":"costs 100 SP; you have 44; needs Strength 23 (you have 22)","requires":"Strength 23"}`.
 `why` lists every reason it can't be learned now, e.g.
 `"costs 100 SP; you have 44; needs Strength 23 (you have 22)"` (also: needs its skill first,
 initiation only).
