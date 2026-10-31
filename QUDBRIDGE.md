@@ -187,8 +187,10 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
    Starting a new character from the main menu isn't possible through the API.
 3. Combat: verified 2026-10-30, ranged (dragonflies, croc; bleeding, swoop attacks) and melee (`attack`
    on a glowfish, counterattacks in the same response). Walking into a neutral swaps places; neither
-   `attack` nor `fire` on a neutral asked "really attack?". Still untested: move-to-attack a hostile,
-   interruptions of auto-actions by hostiles.
+   `attack` nor `fire` on a neutral asked "really attack?". Verified 2026-10-30 on a croc: `fire` after the
+   Busy change (1 turn each, killed it), `travel` interrupted ("You see a croc to the south and stop
+   moving.", 1 turn), `rest` and `wait turns` refused with a popup, no turn used. Still untested:
+   move-to-attack a hostile (the croc died before reaching melee).
 4. Untested paths (`choose {"dir":...}` on a direction prompt now verified via Shield Slam): `getfrom` on a container
    (Joppa chests are villagers' property, so taking is stealing), trade `offer`, storing into a container.
 5. Ranged combat: `fire {x,y}` and `reload` done (verified 2026-10-30; target passed straight to
@@ -200,8 +202,8 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
    real ability (Charge etc.); `PickField` (multi-cell) is cancel-only.
 7. Done 2026-10-30: `travel` (x,y or edge), `explore`, `rest`, `wait` with `turns`, `stop` (src/Travel.cs;
    the game's auto-actions). Verified: explore to "nowhere else to explore", travel 57 turns, edge,
-   wait 5, rest at full HP, stop mid-walk, errors. Untested: interruption by hostiles, rest refused by
-   hostiles, "no path" popup.
+   wait 5, rest at full HP, stop mid-walk, errors, hostile interruption and refusals (see 3).
+   Untested: "no path" popup.
 8. Level-up: popup readable; `points` in `/state`, `GET /character`, `learn` / `raise` / `mutate`
    (src/Advancement.cs; copies the status screens' checks). Verified 2026-10-30: learn power, raise
    mutation rank, all error cases. Untested: `raise` attribute with AP, `mutate` with 4 MP (choice popup).
