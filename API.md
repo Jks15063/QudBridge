@@ -98,7 +98,9 @@ $ curl -s 'http://localhost:15600/state?messages=3'
   game tells the player: a wound level like `"Wounded"`, or exact `"hp / max"` only with scanning.
   `flying: true` (omitted otherwise) means you can't hit it in melee unless you fly too; use `fire`.
 - `items`: visible items on the ground, nearest first (max 40).
-- `features`: visible furniture, containers and solid objects (max 40).
+- `features`: furniture, containers and solid objects (max 40): those in view, nearest first, then
+  those remembered from earlier, marked `"inView": false`. A remembered feature is where it is now, which
+  may not be where you last saw it (the game draws it the same way).
 - `inventory`: carried items. `equipped`: one entry per equipped item, labelled by its (first) body
   slot. `id` is the game's own number for the object (`GameObject.BaseID`): it stays with the item when
   the inventory changes, across equipping and unequipping, and across saves. The exception is stacks: using or
@@ -113,7 +115,9 @@ $ curl -s 'http://localhost:15600/state?messages=3'
 
 ### Map symbols
 
-"In view" means in line of sight and lit. Remembered cells only show terrain.
+"In view" means in line of sight and lit. Remembered cells show what the game still draws there:
+walls, doors, stairs, furniture and open liquid. The game doesn't draw items or creatures out of view,
+so they aren't listed; remember them yourself if you need them.
 
 | Char | Meaning |
 |---|---|

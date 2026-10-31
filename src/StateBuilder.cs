@@ -51,6 +51,7 @@ namespace QudBridge
             var creatures = new List<GameObject>();
             var items = new List<GameObject>();
             var features = new List<GameObject>();
+            var remembered = new HashSet<GameObject>();
             Dictionary<string, string> worldLegend = null;
             string[] rows = null;
             if (zone != null && zone.IsWorldMap())
@@ -59,7 +60,7 @@ namespace QudBridge
             }
             else if (zone != null)
             {
-                rows = BuildMap(zone, player, creatures, items, features);
+                rows = BuildMap(zone, player, creatures, items, features, remembered);
             }
 
             // The window: rows y0.., columns x0.. of the zone, clipped to it.
@@ -121,6 +122,8 @@ namespace QudBridge
                     name = Clean(f.DisplayName),
                     x = f.CurrentCell.X,
                     y = f.CurrentCell.Y,
+                    // Out of view: drawn from memory, as the game draws it; it may have moved or gone since.
+                    inView = remembered.Contains(f) ? false : (bool?)null,
                 }),
                 inventory = BuildInventory(player),
                 equipped = BuildEquipped(player),
@@ -223,9 +226,9 @@ namespace QudBridge
         // One char per cell. "In view" mirrors what the renderer shows: the cell is in line of sight
         // (Cell.IsVisible, XRL.World/Cell.cs:3490) and lit (Cell.IsLit, Cell.cs:3485); objects additionally
         // pass GameObject.IsVisible (GameObject.cs:10465), which handles hidden/invisible things.
-        // Remembered cells only show static terrain.
+        // Remembered cells show what the game still draws there (see RememberedChar).
         private static string[] BuildMap(Zone zone, GameObject player, List<GameObject> creatures,
-            List<GameObject> items, List<GameObject> features)
+            List<GameObject> items, List<GameObject> features, HashSet<GameObject> remembered)
         {
             int w = zone.Width, h = zone.Height;
             var grid = new char[h][];
@@ -245,7 +248,7 @@ namespace QudBridge
                     }
                     else
                     {
-                        grid[y][x] = RememberedChar(cell);
+                        grid[y][x] = RememberedChar(cell, features, remembered);
                     }
                 }
             }
@@ -254,7 +257,9 @@ namespace QudBridge
             Comparison<GameObject> byDistance = (a, b) => a.DistanceTo(player).CompareTo(b.DistanceTo(player));
             creatures.Sort(byDistance);
             items.Sort(byDistance);
-            features.Sort(byDistance);
+            // In-view features first, so remembered ones don't push them past the cap.
+            features.Sort((a, b) => remembered.Contains(a) != remembered.Contains(b)
+                ? (remembered.Contains(a) ? 1 : -1) : byDistance(a, b));
             // Iterate backwards so where creatures share a cell, the nearest one's key is shown.
             for (int i = creatures.Count - 1; i >= 0; i--)
             {
@@ -490,27 +495,53 @@ namespace QudBridge
             return sb.ToString();
         }
 
-        private static char RememberedChar(Cell cell)
+        // Cell.Render (XRL.World/Cell.cs:539) draws an object in a cell out of view only if its Render part is
+        // RenderIfDark: walls, doors, stairs, furniture (ObjectBlueprints/Furniture.xml:37) and open liquid
+        // (LiquidVolume.cs:4637), but not items. Creatures with it (plants, some animals) are left out: the game
+        // draws them where they are now, which the player hasn't seen.
+        private static char RememberedChar(Cell cell, List<GameObject> features, HashSet<GameObject> remembered)
         {
+            int best = 0;
             char ch = ',';
             foreach (GameObject obj in cell.Objects)
             {
+                Render render = obj.Render;
+                // Hidden: e.g. a secret door not yet found.
+                if (render == null || render.Never || obj.IsHidden)
+                {
+                    continue;
+                }
+                // Stairs, doors and walls are always kept, as the map did before RenderIfDark was checked.
                 if (obj.HasPart<StairsUp>())
                 {
-                    return '<';
+                    Take(ref best, ref ch, 7, '<');
                 }
-                if (obj.HasPart<StairsDown>())
+                else if (obj.HasPart<StairsDown>())
                 {
-                    return '>';
+                    Take(ref best, ref ch, 7, '>');
                 }
-                if (obj.IsDoor())
+                else if (obj.IsDoor())
                 {
                     Door door = obj.GetPart<Door>();
-                    ch = door != null && door.Open ? '\'' : '+';
+                    Take(ref best, ref ch, 6, door != null && door.Open ? '\'' : '+');
                 }
-                else if (ch == ',' && obj.IsWall())
+                else if (obj.IsWall())
                 {
-                    ch = '#';
+                    Take(ref best, ref ch, 3, '#');
+                }
+                else if (!render.Visible || !render.RenderIfDark || obj.IsCombat || obj.HasPropertyOrTag("Non"))
+                {
+                    continue;
+                }
+                else if (IsFeature(obj))
+                {
+                    features.Add(obj);
+                    remembered.Add(obj);
+                    Take(ref best, ref ch, 4, '&');
+                }
+                else if (obj.IsOpenLiquidVolume())
+                {
+                    Take(ref best, ref ch, 2, '~');
                 }
             }
             return ch;

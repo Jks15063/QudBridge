@@ -232,7 +232,12 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
    (`map.x0`/`y0`); `messages`/`legend` also work on `/action` now (StateOptions). Verified: view 8
    (clipped at the bottom edge), view 0, on an action, bad values. The rest of the ~2.3 KB is
    inventory, equipment and lists.
-12. Out-of-view objects aren't listed (remembered cells show terrain only).
+12. Done 2026-10-30: remembered cells now draw what the game draws out of view
+   (Cell.Render keeps only RenderIfDark objects: walls, doors, stairs, furniture, open liquid), and those
+   features are listed with `inView: false` after the in-view ones. Items and creatures stay unlisted out of
+   view, as in the game (the client remembers them). Undiscovered secret doors are no longer drawn from memory.
+   Verified in Kimas: sconces, holograms, a chest, an archway and a brazier listed `inView: false` after walking
+   away, remembered pools drawn `~`; a hookah (its blueprint sets RenderIfDark="false") correctly dropped.
 13. Done 2026-10-30: inventory/equipped entries carry `id` (`GameObject.BaseID`, the game's own object number;
    reading it only assigns one from the game's sequence if missing, as the game itself does) and `item` takes
    that id, for carried or equipped items. Partly used stacks: which part keeps the id depends on the action
@@ -240,4 +245,8 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
    dropping 1 of 2 torches (the rest got a new id), picking it back up (merged into the stack, stack kept its id).
 14. Done 2026-10-30: the "QudBridge active" in-game message is gone (Player.log lines only; the version is
    on `GET /`). Verified after a restart.
-15. Settle's "player ready" probe can fire slightly before all creatures finish their turn in edge cases.
+15. Done 2026-10-30: gameQueue is also drained from RenderBase while creatures act,
+   when the player can already hold 1000 energy. A Harmony patch (PlayerTurnPatch) marks XRLCore.PlayerTurn;
+   the ready probe, the end-of-command ready mark and action start (`409 not the player's turn`) now require it.
+   Verified no regressions (moves, blocked move taking no time, wait/wait N, travel, talk + conversation); the
+   original race wasn't reproduced on purpose.

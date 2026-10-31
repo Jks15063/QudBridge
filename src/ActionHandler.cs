@@ -100,6 +100,11 @@ namespace QudBridge
             XRLCore.RegisterOnEndPlayerTurnCallback(_ => MarkReadyIfPlayerCanAct(), Single: true);
         }
 
+        // True while XRLCore.PlayerTurn runs (PlayerTurnPatch). gameQueue is also drained from RenderBase while
+        // creatures act (XRLCore.cs:2621), when the player may already hold 1000 energy but creatures ahead of them
+        // haven't moved yet; that must not count as the player's turn, for starting an action or for Settle.
+        public static volatile bool InPlayerTurn;
+
         // Posted actions still running (see Posted). Settle ignores turn/ready signals while this is non-zero.
         private static int Busy;
 
@@ -128,7 +133,7 @@ namespace QudBridge
         private static void MarkReadyIfPlayerCanAct()
         {
             GameObject player = The.Player;
-            if (player != null && player.Energy != null && player.Energy.Value >= 1000 && !AutoAct.IsActive())
+            if (InPlayerTurn && player != null && player.Energy != null && player.Energy.Value >= 1000 && !AutoAct.IsActive())
             {
                 Interlocked.Increment(ref ReadyMarks);
                 Progress.Set();
@@ -276,7 +281,7 @@ namespace QudBridge
         // On the game thread: is the player back in normal play with a turn to take?
         private static bool IsPlayerReady()
         {
-            return Volatile.Read(ref Busy) == 0 && The.Game != null && The.Game.Running && The.Player != null
+            return Volatile.Read(ref Busy) == 0 && InPlayerTurn && The.Game != null && The.Game.Running && The.Player != null
                 && GameManager.Instance.CurrentGameView == Options.StageViewID
                 && !AutoAct.IsActive() && The.Player.Energy.Value >= 1000;
         }
@@ -294,7 +299,8 @@ namespace QudBridge
             }
             // gameQueue is also drained mid-turn (RenderBase during autoact/animations); only act when the
             // player has a full turn's energy, as PlayerTurn's loop requires (XRLCore.cs:754).
-            if (AutoAct.IsActive() || The.Player.Energy.Value < 1000)
+            // InPlayerTurn: not from a RenderBase drain while creatures act.
+            if (!InPlayerTurn || AutoAct.IsActive() || The.Player.Energy.Value < 1000)
             {
                 throw new ActionRejectedException(409, "not the player's turn");
             }
