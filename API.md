@@ -183,7 +183,8 @@ Example (level-2 true kin, 44 SP, Strength 22):
 `"costs 100 SP; you have 44; needs Strength 23 (you have 22)"` (also: needs its skill first,
 initiation only).
 Powers with cost `0` come free with their skill. `rank` is the mutation's effective rank, `baseRank`
-the bought one. `canMutate` is false for creatures that can't buy mutations (e.g. true kin).
+the bought one. `rank` is capped at level/2+1, so it can be below what a game message announced (level 5's
+rapid advancement said "rank 4" for a mutation whose effective rank was 3). `canMutate` is false for creatures that can't buy mutations (e.g. true kin).
 
 ```
 $ curl -s -X POST http://127.0.0.1:15600/action -d '{"type":"learn","name":"Sling and Run"}'
@@ -230,7 +231,7 @@ Body: a JSON object with a `type` and type-specific fields.
 | `learn` | `name` | buys a skill or power (name or class from `GET /character`) for its SP cost. Instant, no time passes |
 | `raise` | `attribute` or `mutation` | spends 1 AP on an attribute (`"Strength"` or `"str"`), or 1 MP on a mutation's rank |
 | `tinker` | `build`, or `mod` plus `item`/`slot` | builds a recipe or applies a mod, by name from `GET /tinkering` (a mod also by its target). `400` for an unknown recipe (lists the known ones), `409` if the mod can't go on that item. The game's own failures (bits, ingredient, hostiles nearby) come back as its popups |
-| `mutate` | — | spends 4 MP on a new mutation: returns the game's "Choose a mutation" `prompt`; answer with `choose {"option": i}` |
+| `mutate` | — | spends 4 MP on a new mutation: returns the game's "Choose a mutation" `prompt`; answer with `choose {"option": i}`. Some mutations ask a follow-up (Horns: "Choose variant"), then "You gain ...!" |
 | `wait` | optional `turns` | `CmdWait` (one turn); with `turns`, waits that many as "Wait N Turns" does (refused with a popup if hostiles are in view) |
 | `travel` | `x`, `y` | walks to that cell of this zone by the game's pathing, as clicking the map does. Unexplored cells are fine (it explores its way there). No path: a popup "You cannot find a path to your destination." |
 | `travel` | `edge`: `N` / `S` / `E` / `W` | walks to that edge of the zone (`CmdMoveToEdge`; its direction prompt is answered for you). Another `move` off the edge enters the next zone |

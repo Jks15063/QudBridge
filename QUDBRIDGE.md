@@ -218,7 +218,11 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
    Untested: "no path" popup.
 8. Level-up: popup readable; `points` in `/state`, `GET /character`, `learn` / `raise` / `mutate`
    (src/Advancement.cs; copies the status screens' checks). Verified 2026-10-30: learn power, raise
-   mutation rank, all error cases. Untested: `raise` attribute with AP, `mutate` with 4 MP (choice popup).
+   mutation rank, all error cases. Verified 2026-10-30 on a mutant (Siruumemir, `xp:1975` wish to level 5):
+   `mutate` with 4 MP (choice popup, then Horns' "Choose variant" popup, then "You gain Antlers!"; antlers
+   equipped on Head, MP 4 -> 0), `raise` Toughness with 1 AP (21, +1 max HP), 0-point refusals. Level-up
+   prompts from the game also answered: Unstable Genome's 3-mutation pick, level 5's "spend 4 MP before
+   rapidly mutating?" and its physical-mutation pick.
 9. Done 2026-10-30 (src/ScreenBridge.cs, src/Tinkering.cs): prompt kinds `book` (next/prev/close),
    `terminal` (option/quit; finishes the typing first so TextComplete, e.g. implant install, runs),
    `number` (gamepad AskNumberScreen), `statusScreen` (close only); `GET /tinkering` + `tinker`
