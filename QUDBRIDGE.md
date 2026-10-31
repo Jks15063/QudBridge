@@ -100,9 +100,11 @@ Expose the currently open popup/menu (title, text, options) in `/state`, and an 
 - Document every endpoint in `API.md` with request/response examples.
 - When something in the game's internals is unclear, show me the relevant decompiled code rather than assuming.
 
-## Status and handoff (2026-10-30)
+## Status and handoff (2026-10-31)
 
-All seven milestones are done and committed on `master`; the API is documented in `API.md`.
+All seven milestones and the numbered follow-up list below are done and committed on `master`; the
+API is documented in `API.md`. Still untested for lack of a chance in-game: multi-page books, terminals,
+the number screen, tinkering with recipes (see item 9).
 `5e45379` (popup grace-period change) verified in-game 2026-10-30: a conversation choice leading
 back to an identical node returns in ~0.02 s. Settle now also waits out auto-actions (see Gotchas).
 
@@ -117,8 +119,9 @@ back to an identical node returns in ~0.02 s. Settle now also waits out auto-act
 Required game settings (otherwise requests time out while the game window is in the background):
 **Options → App Settings → Keep Caves of Qud active in background** (needs "Show advanced
 options") and **Display → Frame rate** set to a number (e.g. 60), not VSync (VSync in the
-background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus", a level-1 true kin warrior (long sword, shield,
-  Issachar rifle) in the Joppa outskirts. The first one, Mamower, died testing game over.
+background pins a CPU core). Test characters so far have all died: Mamower (testing game over), Iusar Ganuginus (true kin, to Tam
+  after the Joppa chest test), Siruumemir (mutant, Kimas, to a sappy fractus). Make a new one to test.
+  The `xp:N` wish (Ctrl+W) levels a character quickly for advancement tests (`xp:1975` = level 5).
 
 ### Architecture (src/)
 
@@ -137,6 +140,8 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
   because modern popups/screens block the core thread (`Popup.cs:899`, `.Result` on UI tasks).
 - `FocusPatch.cs`: Harmony prefixes on `GameManager.OnApplicationFocus/OnApplicationPause` so losing
   window focus doesn't put the turn loop to sleep (`XRLCore.cs:756`).
+- `PlayerTurnPatch.cs`: Harmony prefix/finalizer on `XRLCore.PlayerTurn` setting
+  `ActionHandler.InPlayerTurn` (see Gotchas).
 - `StateBuilder.cs`: `/state` snapshot (player, map with own symbol set, creatures, items, features,
   inventory, equipment, messages; world-map terrain mode). `Clean()` = own thread-safe markup
   stripper (the game's `ColorUtility.StripFormatting` shares a static StringBuilder) + stat glyphs
@@ -183,6 +188,13 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
 - `PlayerTurn` (and the begin-player-turn callback) runs for every step of an auto-action ("take all",
   auto-explore, walking), so the begin-turn hook ignores turns while `AutoAct.IsActive()`; otherwise
   Settle returns after the first step with a half-done state.
+- gameQueue is also drained from `RenderBase` while creatures act (XRLCore.cs:2621), when the player may
+  already have 1000 energy but creatures ahead in the queue haven't moved. "Energy >= 1000" alone isn't
+  "the player's turn": the ready probe, the end-of-command ready mark and action start also need
+  `InPlayerTurn` (PlayerTurnPatch). PlayerTurn's loop can exit with 1000 energy (SkipPlayerTurn, UI-thread
+  hand-off), so an end-of-turn callback can't clear the flag; the patch's finalizer does.
+- The map's remembered cells follow `Cell.Render`: only `RenderIfDark` objects are drawn out of view.
+  Furniture inherits it, but some blueprints turn it off (hookahs), and items never have it.
 
 ### What still needs work (priority order)
 
