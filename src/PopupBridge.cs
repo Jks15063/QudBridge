@@ -150,7 +150,7 @@ namespace QudBridge
         }
 
         // What /state and action results show for whatever is waiting on the player: a popup, a direction
-        // prompt, or the item picker.
+        // prompt, the item picker, the trade screen, a book or terminal (ScreenBridge), or the end screen.
         public static object DescribePrompt()
         {
             if (IsDirectionPrompt())
@@ -177,6 +177,12 @@ namespace QudBridge
             if (trade != null)
             {
                 return TradeBridge.Describe(trade);
+            }
+            // Books, terminals, the gamepad number prompt.
+            object screen = ScreenBridge.Describe();
+            if (screen != null)
+            {
+                return screen;
             }
             return GameOver.Describe();
         }
@@ -270,6 +276,11 @@ namespace QudBridge
                 if (trade != null)
                 {
                     return TradeBridge.Choose(trade, body);
+                }
+                string answered = ScreenBridge.Choose(body);
+                if (answered != null)
+                {
+                    return answered;
                 }
                 if (GameOver.TryClose())
                 {

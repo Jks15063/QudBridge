@@ -123,7 +123,10 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
 ### Architecture (src/)
 
 - `QudBridge.cs`: mod entry. `[ModSensitiveCacheInit]` starts the server and registers turn hooks;
-  `[CallAfterGameLoaded]` / `[PlayerMutator]` post the "QudBridge active" message.
+  `[CallAfterGameLoaded]` / `[PlayerMutator]` log the load to Player.log (no in-game message).
+- `ScreenBridge.cs`: books, terminals, the gamepad number screen and the status screens (UI thread),
+  wired into PopupBridge's DescribePrompt/Choose.
+- `Tinkering.cs`: `GET /tinkering` and the `tinker` action (game thread; the tab's own build/mod calls).
 - `BridgeServer.cs`: `HttpListener` on `localhost`/`127.0.0.1:15600`, thread-pool handlers, routing,
   JSON (nulls omitted), error mapping. Cheap off-thread checks (`The.Game.Running`, current view
   name) make "no game" / "not in normal play" fail fast instead of timing out.
@@ -210,7 +213,12 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
 8. Level-up: popup readable; `points` in `/state`, `GET /character`, `learn` / `raise` / `mutate`
    (src/Advancement.cs; copies the status screens' checks). Verified 2026-10-30: learn power, raise
    mutation rank, all error cases. Untested: `raise` attribute with AP, `mutate` with 4 MP (choice popup).
-9. Other unreadable screens: books, terminals, tinkering, gamepad `AskNumberScreen`.
+9. Done 2026-10-30 (src/ScreenBridge.cs, src/Tinkering.cs): prompt kinds `book` (next/prev/close),
+   `terminal` (option/quit; finishes the typing first so TextComplete, e.g. implant install, runs),
+   `number` (gamepad AskNumberScreen), `statusScreen` (close only); `GET /tinkering` + `tinker`
+   action instead of the tinkering tab. Verified: status screen (Message Log tab) read and closed,
+   active-effects book read and closed (one page). Untested: multi-page books, terminals, the number
+   screen, tinkering with recipes/bits (test character has none). Still unreadable: Sifrah games.
 10. Done 2026-10-30: `look {x,y}` (src/Looking.cs; `Look.GenerateTooltipInformation`, then the
    AfterLookedAt/LookedAt events as the looker fires them). Verified on a dragonfly, the player's cell,
    empty, unseen and outside cells (distinct errors). Items: the existing `item` verb `look` returns the description popup (verified).
@@ -220,5 +228,6 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
    inventory, equipment and lists.
 12. Out-of-view objects aren't listed (remembered cells show terrain only).
 13. Inventory indices shift when inventory changes; stable IDs would need `GameObject.ID` (writes the save).
-14. The milestone-2 "QudBridge active" message clutters `messages`.
+14. Done 2026-10-30: the "QudBridge active" in-game message is gone (Player.log lines only; the version is
+   on `GET /`). Verified after a restart.
 15. Settle's "player ready" probe can fire slightly before all creatures finish their turn in edge cases.

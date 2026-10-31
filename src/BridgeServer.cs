@@ -237,6 +237,25 @@ namespace QudBridge
                     WriteJson(context, 200, GameThread.Invoke(() => Advancement.Describe(details)));
                     return;
                 }
+                if (path == "/tinkering")
+                {
+                    if (request.HttpMethod != "GET")
+                    {
+                        WriteJson(context, 405, new { error = "method not allowed" });
+                        return;
+                    }
+                    if (!(XRL.The.Game?.Running ?? false))
+                    {
+                        NoGame();
+                    }
+                    string tinkerView = GameManager.Instance?.CurrentGameView;
+                    if (tinkerView != XRL.UI.Options.StageViewID)
+                    {
+                        throw new ActionRejectedException(409, "not in normal play (screen: " + tinkerView + "); answer the prompt in GET /state first");
+                    }
+                    WriteJson(context, 200, GameThread.Invoke(() => Tinkering.Describe()));
+                    return;
+                }
                 if (path == "/action")
                 {
                     if (request.HttpMethod != "POST")

@@ -341,6 +341,10 @@ namespace QudBridge
                         Advancement.Mutate();
                     });
                     return null;
+                case "tinker":
+                    // Build or mod like the tinkering tab (Tinkering.cs); failures come back as the game's popups.
+                    Tinkering.Tinker(body);
+                    return null;
                 case "reload":
                     // CommandReloadEvent (XRLCore.cs:2225); "nothing to reload" etc. show up in the log.
                     Command("CmdReload");
@@ -395,7 +399,7 @@ namespace QudBridge
                     return null;
                 default:
                     throw new ActionRejectedException(400, "unknown action type \"" + type + "\"",
-                        new { types = new[] { "move", "travel", "explore", "rest", "stop", "attack", "fire", "throw", "reload", "ability", "learn", "raise", "mutate", "wait", "pickup", "getfrom", "stairs", "eat", "drink", "equip", "unequip", "item", "talk", "look", "choose" } });
+                        new { types = new[] { "move", "travel", "explore", "rest", "stop", "attack", "fire", "throw", "reload", "ability", "learn", "raise", "mutate", "tinker", "wait", "pickup", "getfrom", "stairs", "eat", "drink", "equip", "unequip", "item", "talk", "look", "choose" } });
             }
         }
 
@@ -569,7 +573,7 @@ namespace QudBridge
             });
         }
 
-        private static GameObject ResolveItem(GameObject player, JObject body)
+        public static GameObject ResolveItem(GameObject player, JObject body)
         {
             JToken index = body["item"];
             string slot = (string)body["slot"];

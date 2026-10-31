@@ -1,5 +1,4 @@
 using XRL;
-using XRL.Messages;
 using XRL.World;
 
 namespace QudBridge
@@ -10,6 +9,8 @@ namespace QudBridge
     //  - [CallAfterGameLoaded]: run by ModManager.CallAfterGameLoaded (XRL/ModManager.cs:374),
     //    called from XRLGame.LoadGame (XRL/XRLGame.cs:1954). Saved-game loads only, not new games.
     [HasModSensitiveStaticCache]
+    // Only Player.log lines at load: an in-game message would show up in every request's `messages`
+    // (the version is on GET /health).
     [HasCallAfterGameLoaded]
     public static class QudBridgeMod
     {
@@ -29,7 +30,6 @@ namespace QudBridge
         public static void OnGameLoaded()
         {
             MetricsManager.LogInfo("QudBridge: save loaded");
-            MessageQueue.AddPlayerMessage("QudBridge " + Version + " active.", 'G');
         }
     }
 
@@ -41,7 +41,6 @@ namespace QudBridge
         public void mutate(GameObject player)
         {
             MetricsManager.LogInfo("QudBridge: new game started");
-            MessageQueue.AddPlayerMessage("QudBridge " + QudBridgeMod.Version + " active.", 'G');
         }
     }
 }

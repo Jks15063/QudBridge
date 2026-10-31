@@ -181,6 +181,26 @@ $ curl -s -X POST http://127.0.0.1:15600/action -d '{"type":"learn","name":"Dead
 {"error":"costs 200 SP; you have 28"}
 ```
 
+## `GET /tinkering`
+
+Bits and known tinkering recipes, as the status screens' tinkering tab lists them (that tab can't be
+read). Build or mod with the `tinker` action, which runs the same game code the tab does
+(`TinkeringScreen.PerformUITinkerBuild` / `PerformUITinkerMod`).
+
+```
+$ curl -s http://127.0.0.1:15600/tinkering
+{"skill":"Tinker I","bits":{"scrap":4,"wires":2},
+ "build":[{"name":"...","tier":1,"cost":{"scrap":1,"wires":1},"why":"not enough bits"}, ...],
+ "mods":[{"name":"...","tier":1,"targets":[{"item":3,"name":"...","cost":{...}},{"slot":"Right Hand","name":"...","cost":{...}}]}, ...]}
+```
+
+`skill` is your highest Tinker skill (omitted without one). `bits` and `cost` are by bit name (empty
+bits are omitted). `why` (build recipes only) is the first check that would fail: `needs Tinker II`,
+`missing ingredient`, `not enough bits`; hostiles nearby aren't checked here. `ingredient` is shown when
+a recipe needs one. A mod's `targets` are the inventory (`item`) or equipped (`slot`) items it can go
+on, each with its own cost. Not yet tried with a character that has recipes (the test character has
+none; it returns `{"bits":{},"build":[],"mods":[]}`).
+
 ## `POST /action`
 
 Performs one player action, waits until it is the player's turn again (other creatures have acted),
@@ -198,6 +218,7 @@ Body: a JSON object with a `type` and type-specific fields.
 | `ability` | `name`, optional `dir` | uses an ability by its `name` from `state.player.abilities` (or its command), as the ability bar does. If it asks "which direction?" it's answered with `dir`; without `dir` that comes back as a `direction` prompt. `409` with the game's message while cooling down ("You must wait 38 rounds before using Shield Slam."). Abilities that pick a cell return a `target` prompt that can only be cancelled for now |
 | `learn` | `name` | buys a skill or power (name or class from `GET /character`) for its SP cost. Instant, no time passes |
 | `raise` | `attribute` or `mutation` | spends 1 AP on an attribute (`"Strength"` or `"str"`), or 1 MP on a mutation's rank |
+| `tinker` | `build`, or `mod` plus `item`/`slot` | builds a recipe or applies a mod, by name from `GET /tinkering` (a mod also by its target). `400` for an unknown recipe (lists the known ones), `409` if the mod can't go on that item. The game's own failures (bits, ingredient, hostiles nearby) come back as its popups |
 | `mutate` | — | spends 4 MP on a new mutation: returns the game's "Choose a mutation" `prompt`; answer with `choose {"option": i}` |
 | `wait` | optional `turns` | `CmdWait` (one turn); with `turns`, waits that many as "Wait N Turns" does (refused with a popup if hostiles are in view) |
 | `travel` | `x`, `y` | walks to that cell of this zone by the game's pathing, as clicking the map does. Unexplored cells are fine (it explores its way there). No path: a popup "You cannot find a path to your destination." |
@@ -233,7 +254,7 @@ $ curl -s -X POST http://localhost:15600/action -d '{"type":"move","dir":"N"}'
 - `prompt`: the game is waiting on a popup or menu. Includes `screen`, `log` and `prompt` (see
   below); answer it with `choose`. The action itself has often already happened and the popup is
   its result message (eating, drinking).
-- `blocked`: the game is on a screen this API can't read (e.g. the inventory screen); `screen` names it.
+- `blocked`: the game is on a screen this API can't read (e.g. a Sifrah game); `screen` names it.
 - `timeout`: nothing settled within 15 s (120 s for `travel`, `explore`, `rest` and `wait` with
   `turns`). If an auto-action is still running the error says so; `stop` interrupts it.
 
@@ -271,8 +292,9 @@ $ curl -s http://localhost:15600/state
  "buttons":[{"i":0,"text":"[Esc] Cancel","command":"Cancel"}]}}
 ```
 
-It returns `409 {"error":"the game is on a screen this API can't read yet","screen":...}` for other
-screens. Answer with `POST /action {"type":"choose", ...}`; it waits like any action and returns
+Kinds: `popup`, `target`, `direction`, `pick`, `trade`, `book`, `terminal`, `number`,
+`statusScreen`, `gameover`. It returns `409 {"error":"the game is on a screen this API can't read
+yet","screen":...}` for other screens (e.g. the world map's legacy screens, Sifrah games). Answer with `POST /action {"type":"choose", ...}`; it waits like any action and returns
 `ok` (back to normal play) or the next `prompt` (e.g. the next line of a conversation).
 
 ### `kind: "popup"`
@@ -353,6 +375,55 @@ they pay you).
 | `"side": "theirs"`/`"yours"`, `"item": i`, `"count": n` | sets how many of that item to trade (clamped to the stack; trading away an important item asks first) |
 | `"button": "offer"` | offers the trade (may raise confirmation popups) |
 | `"button": "cancel"` | leaves the trade screen |
+
+### `kind: "book"`
+
+A book: readable items, and some game screens that use the book window (e.g. active effects from the
+character screen).
+
+```
+{"kind":"book","title":"Active Effects - Iusar Ganuginus","page":1,"pages":1,
+ "text":"aggressive stance\n+1 to your penetration roll and -2 to hit while wielding a long blade in the\nprimary hand.",
+ "buttons":["close"]}
+```
+
+`choose {"button": "next"}` / `"prev"` turns the page (only listed when there is one; otherwise `409`),
+`"close"` closes the book. Turning the page runs the book's page callbacks as the screen does.
+
+### `kind: "terminal"`
+
+A computer terminal (cybernetics terminals in Becoming Nooks, and other terminals that use the same
+screen).
+
+```
+{"kind":"terminal","text":"...","options":[{"i":0,"text":"..."}, ...],"hackOption":2,"buttons":["quit"]}
+```
+
+`choose {"option": i}` picks an option (the screen's typing animation is finished first, as a keypress
+does, so anything the screen does when its text completes, e.g. installing an implant, still happens).
+`hackOption` marks the hacking option when there is one. `{"button": "quit"}` leaves the terminal. Not
+yet tried in-game.
+
+### `kind: "number"`
+
+The number prompt used with a controller (with a keyboard the same question is a `popup` with an
+`input`).
+
+```
+{"kind":"number","text":"How many?","value":1,"min":0,"max":5,"buttons":["cancel"]}
+```
+
+`choose {"value": n}` (clamped to `min`..`max`) or `{"button": "cancel"}`. Not yet tried in-game.
+
+### `kind: "statusScreen"`
+
+The status screens (character, inventory, skills, tinkering, journal, quests, factions, message log),
+opened by hand in the game. Not read: `GET /state`, `/character` and `/tinkering` have the same
+information. `tab` is the open tab; `choose {"button": "close"}` closes it.
+
+```
+{"kind":"statusScreen","tab":"Message Log","text":"This screen isn't read; ...","buttons":["close"]}
+```
 
 ### Death and `kind: "gameover"`
 
