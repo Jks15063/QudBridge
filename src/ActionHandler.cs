@@ -118,8 +118,7 @@ namespace QudBridge
             public long Turn;
             // Answer for a direction prompt the command is expected to raise ("talk").
             public string AutoDirection;
-            // The prompt "choose" just answered, serialized. Some screens close a frame or two later
-            // (PickGameObjectScreen.HandleMenuOption is async), so it may still be up briefly.
+            // The non-popup prompt "choose" just answered, serialized; it may still be up briefly (see Run).
             public string Answered;
         }
 
@@ -149,9 +148,18 @@ namespace QudBridge
                 started = Snapshot(Interlocked.Read(ref LastTurn));
                 started.Answered = UiThread.Invoke(() =>
                 {
-                    string before = Newtonsoft.Json.JsonConvert.SerializeObject(PopupBridge.DescribePrompt());
+                    object before = PopupBridge.DescribePrompt();
                     PopupBridge.Choose(body);
-                    return before;
+                    // Answering a popup calls its Hide(), which clears canvasGroup.interactable at once
+                    // (Qud.UI/PopupMessage.cs:1092), so PopupBridge.Top() never sees it again: any popup found
+                    // afterwards is a new one, even with identical text. The other prompts close a moment later
+                    // (the picker and trade screen finish asynchronously; the direction picker reads our key on
+                    // the game thread), so for those remember what was answered and give it time to close.
+                    if (before == null || (string)JObject.FromObject(before)["kind"] == "popup")
+                    {
+                        return null;
+                    }
+                    return Newtonsoft.Json.JsonConvert.SerializeObject(before);
                 });
             }
             else
