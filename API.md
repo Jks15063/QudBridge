@@ -29,10 +29,14 @@ $ curl -s http://localhost:15600/
 Endpoints that read or change game state run their work on the game's core thread and wait up
 to 5 s for it to be picked up (another 5 s if it has started but not finished). The game thread only
 takes work at certain points: during normal play while waiting for your input, and inside popups,
-trade, inventory and the save picker. It does **not** take work:
+trade, inventory and the save picker. It does **not** take work on the main menu / character
+creation, or in menus that don't pump the game queue.
 
-- while the game window is unfocused during normal play (the game sleeps until refocused),
-- on the main menu / character creation, or in menus that don't pump the game queue.
+To work while the game window is in the background, enable **Options → App Settings → Keep Caves
+of Qud active in background** (needs "Show advanced options"). The mod also ignores window
+focus loss while the server is running (otherwise the game sleeps until refocused).
+Also set **Display → Frame rate** to a number (e.g. 60) rather than the default `VSync`: in the
+background VSync doesn't throttle and Unity's main thread pins a CPU core.
 
 In those cases the request fails with `504` instead of hanging. A request that times out before it
 starts is cancelled and never runs.

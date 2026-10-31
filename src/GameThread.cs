@@ -22,8 +22,8 @@ namespace QudBridge
     //  - every iteration of the player-turn loop, via XRLCore.RenderBase (XRL.Core/XRLCore.cs:2621-2624),
     //  - while waiting on a key with pumpActions (ConsoleLib.Console/Keyboard.cs:1038), used by
     //    Popup (XRL.UI/Popup.cs:707), TradeUI, InventoryScreen and the save picker.
-    // It is not drained while the window is unfocused in normal play (XRLCore.cs:756 sleeps until
-    // GameManager.focused), nor in menus that read keys without pumpActions; those requests time out.
+    // It is not drained in menus that read keys without pumpActions, nor while unfocused in normal play
+    // (XRLCore.cs:756; see FocusPatch.cs); those requests time out.
     public static class GameThread
     {
         public const int DefaultTimeoutMs = 5000;
@@ -50,7 +50,7 @@ namespace QudBridge
                 if (item.TryCancel())
                 {
                     throw new GameThreadTimeoutException("game thread did not pick up the request within " + timeoutMs +
-                        "ms (no game loaded, window unfocused, or a menu that doesn't pump the game queue)");
+                        "ms (no game loaded, game paused in the background, or a menu that doesn't pump the game queue)");
                 }
                 // Already running: it will finish on the game thread, but we stop waiting.
                 if (!item.Done.Wait(timeoutMs))
