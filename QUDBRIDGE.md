@@ -154,6 +154,8 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
 - `Travel.cs`: `travel`/`explore`/`rest`/`wait turns`, all game auto-actions (`AutoAct.Setting`), started
   with the same commands as the map click (`Command:CmdMoveToBorder:x,y`), sidebar and keys. `stop`
   (in ActionHandler) bypasses the action lock and calls `AutoAct.Interrupt`.
+- `Looking.cs`: `look {x,y}`, the looker's tooltip text for the visible objects on a cell; the
+  after-look events are `Posted` so a popup they raise comes back as a prompt.
 - `MessageLog.cs`: numbered copy of message-log lines from `XRLCore.RegisterNewMessageLogEntryCallback`,
   so a request can report the lines it caused even while the core thread is blocked.
 
@@ -209,7 +211,9 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
    (src/Advancement.cs; copies the status screens' checks). Verified 2026-10-30: learn power, raise
    mutation rank, all error cases. Untested: `raise` attribute with AP, `mutate` with 4 MP (choice popup).
 9. Other unreadable screens: books, terminals, tinkering, gamepad `AskNumberScreen`.
-10. Look/examine descriptions of creatures and items.
+10. Done 2026-10-30: `look {x,y}` (src/Looking.cs; `Look.GenerateTooltipInformation`, then the
+   AfterLookedAt/LookedAt events as the looker fires them). Verified on a dragonfly, the player's cell,
+   empty, unseen and outside cells (distinct errors). Items: the existing `item` verb `look` returns the description popup (verified).
 11. `/state` size (~5 KB, mostly the 80x25 map): an option for a window around the player.
 12. Out-of-view objects aren't listed (remembered cells show terrain only).
 13. Inventory indices shift when inventory changes; stable IDs would need `GameObject.ID` (writes the save).

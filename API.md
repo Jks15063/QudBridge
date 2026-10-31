@@ -208,6 +208,7 @@ Body: a JSON object with a `type` and type-specific fields.
 | `item` | `item` or `slot`, `verb` | any inventory action of that item, by name or menu text (`"drop"`, `"apply"`, `"read"`, ...) |
 | `getfrom` | `dir` | `CmdGetFrom<dir>`: take from a container (e.g. a chest) in that direction |
 | `talk` | `dir` | `CmdTalk`; the "which direction?" prompt is answered with `dir` for you |
+| `look` | `x`, `y` | what the looker shows for each visible object on that cell (no time passes): returns `look`, a list in the looker's order (creatures first, then terrain and items) of `{name, feeling, difficulty, health, description}`. `feeling` (`Hostile`/`Neutral`/`Friendly`) and `difficulty` (the game's rating relative to you: `Average`, `Tough`, ...) are for creatures. A creature's `description` lists its equipment and physical features. Looking can note a secret or observation, so the result may be a `prompt` (still with `look`). `409` `"you can't see that cell"` or `"there's nothing there to look at"`. For inventory or equipped items use `item` with verb `"look"` (a popup with the item's description and stats) |
 | `choose` | see [Prompts](#prompts) | answers the open popup/menu |
 
 `dir` is one of `N S E W NE NW SE SW`. `item` is an index from `state.inventory[].i`; `slot` is a

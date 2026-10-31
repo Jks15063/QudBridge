@@ -188,6 +188,8 @@ namespace QudBridge
             // The non-popup prompt "choose" just answered, serialized; it may still be up briefly (see Run).
             public string Answered;
             public int TimeoutMs = ActionTimeoutMs;
+            // "look": the descriptions, returned with the result.
+            public object Look;
         }
 
         private static Started Snapshot(long turn)
@@ -237,7 +239,14 @@ namespace QudBridge
                 {
                     RequirePlayerTurn();
                     Started s = Snapshot(The.Game.Turns);
-                    s.AutoDirection = Start(type, body);
+                    if (type == "look")
+                    {
+                        s.Look = Looking.At(body);
+                    }
+                    else
+                    {
+                        s.AutoDirection = Start(type, body);
+                    }
                     if (Array.IndexOf(LongActions, type) >= 0 || (type == "wait" && body["turns"] != null))
                     {
                         s.TimeoutMs = LongActionTimeoutMs;
@@ -257,6 +266,7 @@ namespace QudBridge
                 {
                     result = "ok",
                     turns = The.Game.Turns - started.Turn,
+                    look = started.Look,
                     log = MessageLog.Since(started.MessageSeq),
                     state = StateBuilder.Build(messageCount, includeLegend: false),
                 };
@@ -385,7 +395,7 @@ namespace QudBridge
                     return null;
                 default:
                     throw new ActionRejectedException(400, "unknown action type \"" + type + "\"",
-                        new { types = new[] { "move", "travel", "explore", "rest", "stop", "attack", "fire", "throw", "reload", "ability", "learn", "raise", "mutate", "wait", "pickup", "getfrom", "stairs", "eat", "drink", "equip", "unequip", "item", "talk", "choose" } });
+                        new { types = new[] { "move", "travel", "explore", "rest", "stop", "attack", "fire", "throw", "reload", "ability", "learn", "raise", "mutate", "wait", "pickup", "getfrom", "stairs", "eat", "drink", "equip", "unequip", "item", "talk", "look", "choose" } });
             }
         }
 
@@ -662,7 +672,7 @@ namespace QudBridge
                     }
                     else if (prompt != null)
                     {
-                        return new { result = "prompt", screen, log = MessageLog.Since(started.MessageSeq), prompt };
+                        return new { result = "prompt", screen, look = started.Look, log = MessageLog.Since(started.MessageSeq), prompt };
                     }
                     if (screen == "MainMenu" && !(The.Game?.Running ?? false))
                     {
