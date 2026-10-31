@@ -115,6 +115,22 @@ $ curl -s 'http://localhost:15600/state?messages=3'
 | `*` | item(s) |
 | `&` | furniture / container / other solid object |
 
+### World map
+
+When `player.zone.worldMap` is `true`, `map.rows` shows terrain instead: each distinct terrain name
+the game shows (regions like `salt marsh` or `River Svy`, and places like `Joppa`) gets its own
+symbol, assigned most-common-first, so symbols can differ between responses. `map.legend` is
+therefore always included on the world map, and `@` names the tile you're on. `creatures`, `items`
+and `features` are empty there.
+
+```
+"map":{"w":80,"h":25,"legend":{"@":"you (on Joppa)"," ":"unexplored",".":"jungle",",":"salt dunes",
+  ":":"mountains","~":"River Svy","&":"salt marsh","*":"Joppa","1":"Red Rock", ...},
+ "rows":[",,,,,,,,,\"\"5'::::::...", ...]}
+```
+
+Use `stairs` `down` to enter the zone you're standing on.
+
 Returns `409 {"error":"no game in progress (screen: MainMenu)"}` when no game is loaded.
 
 ## `POST /action`

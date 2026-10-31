@@ -40,7 +40,16 @@ namespace QudBridge
             var creatures = new List<GameObject>();
             var items = new List<GameObject>();
             var features = new List<GameObject>();
-            string[] rows = zone != null ? BuildMap(zone, player, creatures, items, features) : null;
+            Dictionary<string, string> worldLegend = null;
+            string[] rows = null;
+            if (zone != null && zone.IsWorldMap())
+            {
+                rows = BuildWorldMap(zone, player, out worldLegend);
+            }
+            else if (zone != null)
+            {
+                rows = BuildMap(zone, player, creatures, items, features);
+            }
 
             return new
             {
@@ -53,7 +62,8 @@ namespace QudBridge
                 {
                     w = zone.Width,
                     h = zone.Height,
-                    legend = includeLegend ? Legend : null,
+                    // The world map's symbols are assigned per response, so its legend is always included.
+                    legend = worldLegend ?? (includeLegend ? Legend : null),
                     rows,
                 },
                 creatures = BuildCreatures(creatures, player),
@@ -214,6 +224,76 @@ namespace QudBridge
             for (int y = 0; y < h; y++)
             {
                 rows[y] = new string(grid[y]);
+            }
+            return rows;
+        }
+
+        // Symbols for world-map terrain, handed out most-common-first. Excludes '@', space, and '<' '>' '#'
+        // (stairs and walls on the local map).
+        private const string WorldSymbols = ".,:;'\"`~^-=+%&$!|/\\()[]{}*?0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+        // On the world map each cell holds one terrain object: a blueprint inheriting "Terrain"
+        // (ObjectBlueprints/WorldTerrain.xml:11), e.g. "salt marsh", "River Svy", "Joppa". Regions and named
+        // places are both terrain (both can be proper nouns), so every distinct name gets its own symbol.
+        private static string[] BuildWorldMap(Zone zone, GameObject player, out Dictionary<string, string> legend)
+        {
+            int w = zone.Width, h = zone.Height;
+            var names = new string[h, w];
+            var counts = new Dictionary<string, int>();
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    Cell cell = zone.GetCell(x, y);
+                    string name = null;
+                    if (cell != null && cell.IsExplored())
+                    {
+                        foreach (GameObject obj in cell.Objects)
+                        {
+                            if (obj.GetBlueprint(UseDefault: false)?.InheritsFrom("Terrain") == true)
+                            {
+                                name = Clean(obj.DisplayNameOnly);
+                                break;
+                            }
+                        }
+                        name = name ?? "unknown";
+                    }
+                    names[y, x] = name;
+                    if (name != null)
+                    {
+                        counts.TryGetValue(name, out int n);
+                        counts[name] = n + 1;
+                    }
+                }
+            }
+            var order = new List<string>(counts.Keys);
+            order.Sort((a, b) => counts[b] != counts[a] ? counts[b].CompareTo(counts[a]) : string.CompareOrdinal(a, b));
+            var symbol = new Dictionary<string, char>();
+            legend = new Dictionary<string, string> { { "@", "you" }, { " ", "unexplored" } };
+            for (int i = 0; i < order.Count; i++)
+            {
+                // More terrain kinds than symbols is not expected; the overflow shares '?'.
+                char c = i < WorldSymbols.Length ? WorldSymbols[i] : '?';
+                symbol[order[i]] = c;
+                string key = c.ToString();
+                legend[key] = legend.TryGetValue(key, out string existing) ? existing + ", " + order[i] : order[i];
+            }
+            Cell here = player.CurrentCell;
+            if (here != null && names[here.Y, here.X] != null)
+            {
+                // '@' hides the tile underneath (often a named place, e.g. Joppa), so name it.
+                legend["@"] = "you (on " + names[here.Y, here.X] + ")";
+            }
+            var rows = new string[h];
+            var line = new char[w];
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    line[x] = here != null && here.X == x && here.Y == y ? '@'
+                        : names[y, x] == null ? ' ' : symbol[names[y, x]];
+                }
+                rows[y] = new string(line);
             }
             return rows;
         }
