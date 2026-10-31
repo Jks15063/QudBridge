@@ -173,6 +173,20 @@ namespace QudBridge
                     {
                         throw new NoGameException("no game in progress (screen: " + (GameManager.Instance?.CurrentGameView ?? "unknown") + ")");
                     }
+                    // Off normal play the game thread is usually blocked on a UI screen (Popup.cs:899), so read
+                    // the popup from the UI thread instead of the game state.
+                    string screen = GameManager.Instance?.CurrentGameView;
+                    if (screen != XRL.UI.Options.StageViewID)
+                    {
+                        object prompt = ActionHandler.TryDescribePopup();
+                        if (prompt != null)
+                        {
+                            WriteJson(context, 200, new { screen, prompt });
+                            return;
+                        }
+                        WriteJson(context, 409, new { error = "the game is on a screen this API can't read yet", screen });
+                        return;
+                    }
                     WriteJson(context, 200, GameThread.Invoke(() => StateBuilder.Build(messages, legend)));
                     return;
                 }
@@ -205,7 +219,8 @@ namespace QudBridge
                     // Also off-thread: modern popups don't pump gameQueue (XRL.UI/Popup.cs:899), so this would
                     // otherwise wait out the 5s dispatch timeout. RequirePlayerTurn repeats it on the game thread.
                     string view = GameManager.Instance?.CurrentGameView;
-                    if (view != XRL.UI.Options.StageViewID)
+                    bool choosing = string.Equals((string)body["type"], "choose", StringComparison.OrdinalIgnoreCase);
+                    if (view != XRL.UI.Options.StageViewID && !choosing)
                     {
                         throw new ActionRejectedException(409, "not in normal play (screen: " + view + ")");
                     }

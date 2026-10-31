@@ -42,6 +42,7 @@ namespace QudBridge
         public const int ActionTimeoutMs = 15000;
         // How long the view must stay off "Stage" before we report the action as blocked on a popup/menu.
         public const int BlockedAfterMs = 1000;
+        public const int AnsweredGraceMs = 1500;
 
         private static readonly string[] Directions = { "N", "S", "E", "W", "NE", "NW", "SE", "SW" };
 
@@ -56,6 +57,7 @@ namespace QudBridge
         private static readonly object ActionLock = new object();
         private static readonly ManualResetEventSlim Progress = new ManualResetEventSlim(false);
         private static int BeginTurns;
+        private static long LastTurn;
         private static int ReadyMarks;
         private static bool HooksRegistered;
 
@@ -69,9 +71,14 @@ namespace QudBridge
             HooksRegistered = true;
             XRLCore.RegisterOnBeginPlayerTurnCallback(_ =>
             {
+                Interlocked.Exchange(ref LastTurn, The.Game?.Turns ?? 0);
                 Interlocked.Increment(ref BeginTurns);
                 Progress.Set();
             });
+            // Every message-log line passes through here (XRL.Messages/MessageQueue.cs:148), on whatever thread
+            // added it. Keeping our own numbered copy lets any request report the lines it caused, even while
+            // the game thread is blocked in a popup.
+            XRLCore.RegisterNewMessageLogEntryCallback(MessageLog.Add);
             // "Single" end-of-turn callbacks run only when PlayerTurn just processed a command (the if (flag)
             // block, XRLCore.cs:2396). If the player can still act, the command took no time.
             XRLCore.RegisterOnEndPlayerTurnCallback(_ => MarkReadyIfPlayerCanAct(), Single: true);
@@ -107,8 +114,24 @@ namespace QudBridge
         {
             public int BeginTurns;
             public int ReadyMarks;
-            public int MessageIndex;
+            public long MessageSeq;
             public long Turn;
+            // Answer for a direction prompt the command is expected to raise ("talk").
+            public string AutoDirection;
+            // The prompt "choose" just answered, serialized. Some screens close a frame or two later
+            // (PickGameObjectScreen.HandleMenuOption is async), so it may still be up briefly.
+            public string Answered;
+        }
+
+        private static Started Snapshot(long turn)
+        {
+            return new Started
+            {
+                BeginTurns = Volatile.Read(ref BeginTurns),
+                ReadyMarks = Volatile.Read(ref ReadyMarks),
+                MessageSeq = MessageLog.LastSeq,
+                Turn = turn,
+            };
         }
 
         private static object Run(JObject body, int messageCount)
@@ -119,49 +142,53 @@ namespace QudBridge
                 throw new ActionRejectedException(400, "missing \"type\"");
             }
             Progress.Reset();
-            // Validate and start the action on the game thread, at a point where the player is waiting for input.
-            Started started = GameThread.Invoke(() =>
+            Started started;
+            if (type == "choose")
             {
-                RequirePlayerTurn();
-                var s = new Started
+                // The game thread is blocked in the popup, so this is answered on the UI thread.
+                started = Snapshot(Interlocked.Read(ref LastTurn));
+                started.Answered = UiThread.Invoke(() =>
                 {
-                    BeginTurns = Volatile.Read(ref BeginTurns),
-                    ReadyMarks = Volatile.Read(ref ReadyMarks),
-                    MessageIndex = The.Game.Player.Messages.Messages.Count,
-                    Turn = The.Game.Turns,
-                };
-                Start(type, body);
-                return s;
-            });
-
-            string outcome = WaitForCompletion(started, out string screen);
-            if (outcome != "ok")
-            {
-                return new
-                {
-                    result = outcome,
-                    screen,
-                    error = outcome == "blocked"
-                        ? "the game is waiting on a popup or menu (" + screen + "); popups are not supported yet"
-                        : "action did not finish within " + ActionTimeoutMs + "ms",
-                };
+                    string before = Newtonsoft.Json.JsonConvert.SerializeObject(PopupBridge.DescribePrompt());
+                    PopupBridge.Choose(body);
+                    return before;
+                });
             }
+            else
+            {
+                // Validate and start the action on the game thread, at a point where the player is waiting for input.
+                started = GameThread.Invoke(() =>
+                {
+                    RequirePlayerTurn();
+                    Started s = Snapshot(The.Game.Turns);
+                    s.AutoDirection = Start(type, body);
+                    return s;
+                });
+            }
+            return Settle(started, messageCount);
+        }
+
+        private static object Finish(Started started, int messageCount)
+        {
             return GameThread.Invoke(() =>
             {
-                var all = The.Game.Player.Messages.Messages;
-                var log = new List<string>();
-                for (int i = Math.Min(started.MessageIndex, all.Count); i < all.Count; i++)
-                {
-                    log.Add(StateBuilder.Clean(all[i]));
-                }
+                Interlocked.Exchange(ref LastTurn, The.Game.Turns);
                 return new
                 {
                     result = "ok",
                     turns = The.Game.Turns - started.Turn,
-                    log,
+                    log = MessageLog.Since(started.MessageSeq),
                     state = StateBuilder.Build(messageCount, includeLegend: false),
                 };
             });
+        }
+
+        // On the game thread: is the player back in normal play with a turn to take?
+        private static bool IsPlayerReady()
+        {
+            return The.Game != null && The.Game.Running && The.Player != null
+                && GameManager.Instance.CurrentGameView == Options.StageViewID
+                && !AutoAct.IsActive() && The.Player.Energy.Value >= 1000;
         }
 
         private static void RequirePlayerTurn()
@@ -183,38 +210,53 @@ namespace QudBridge
             }
         }
 
-        private static void Start(string type, JObject body)
+        // Starts the action; returns the direction to give if the command will ask for one.
+        private static string Start(string type, JObject body)
         {
             switch (type)
             {
                 case "move":
                     Command("CmdMove" + Direction(body));
-                    return;
+                    return null;
                 case "attack":
                     Command("CmdAttack" + Direction(body));
-                    return;
+                    return null;
                 case "wait":
                     Command("CmdWait");
-                    return;
+                    return null;
                 case "pickup":
                     // CommandGet picks up what's here; several items opens a picker (XRLCore.cs:2163).
                     Command("CmdGet");
-                    return;
+                    return null;
                 case "stairs":
                     Command(Stairs(body));
-                    return;
+                    return null;
+                case "getfrom":
+                    // Take from a container (e.g. a chest) in that direction: CommandGetFrom (XRLCore.cs:2169).
+                    Command("CmdGetFrom" + Direction(body));
+                    return null;
+                case "talk":
+                {
+                    // CmdTalk asks for a direction (PickDirection.ShowPicker, XRLCore.cs:2233), answered in Settle.
+                    string dir = Direction(body);
+                    Command("CmdTalk");
+                    return dir;
+                }
+                case "choose":
+                    // Handled in Run (UI thread); only reaches here if the game wasn't in a popup.
+                    throw new ActionRejectedException(409, "no popup is open");
                 case "item":
                     ItemAction(body, (string)body["verb"]);
-                    return;
+                    return null;
                 case "eat":
                 case "drink":
                 case "equip":
                 case "unequip":
                     ItemAction(body, type);
-                    return;
+                    return null;
                 default:
                     throw new ActionRejectedException(400, "unknown action type \"" + type + "\"",
-                        new { types = new[] { "move", "attack", "wait", "pickup", "stairs", "eat", "drink", "equip", "unequip", "item" } });
+                        new { types = new[] { "move", "attack", "wait", "pickup", "getfrom", "stairs", "eat", "drink", "equip", "unequip", "item", "talk", "choose" } });
             }
         }
 
@@ -308,7 +350,7 @@ namespace QudBridge
                 {
                     foreach (BodyPart part in player.Body.GetParts())
                     {
-                        if (part.Equipped != null && string.Equals(part.GetCardinalDescription().Strip(), slot, StringComparison.OrdinalIgnoreCase))
+                        if (part.Equipped != null && string.Equals(StateBuilder.Clean(part.GetCardinalDescription()), slot, StringComparison.OrdinalIgnoreCase))
                         {
                             return part.Equipped;
                         }
@@ -344,40 +386,122 @@ namespace QudBridge
             return null;
         }
 
-        // Runs on the HTTP thread. Only reads two ints and the current view name; never touches game state.
-        private static string WaitForCompletion(Started started, out string screen)
+        // Runs on the HTTP thread, after an action or a popup answer. Finishes when one of these happens:
+        //  - a new player turn begins, or a command/item action ends with the player still able to act
+        //    (the hooks above);
+        //  - the game is back in normal play and the player can act (game-thread probe; covers popups that
+        //    weren't caused by an action, e.g. the HP warning at the top of PlayerTurn, XRLCore.cs:771);
+        //  - a popup is waiting for an answer (UI-thread probe) -> returned so the client can "choose";
+        //  - the view stays on a screen we can't read -> "blocked".
+        private static object Settle(Started started, int messageCount)
         {
             var timer = System.Diagnostics.Stopwatch.StartNew();
-            long offStageSince = -1;
+            long unreadableSince = -1;
             while (true)
             {
                 if (Volatile.Read(ref BeginTurns) != started.BeginTurns || Volatile.Read(ref ReadyMarks) != started.ReadyMarks)
                 {
-                    screen = null;
-                    return "ok";
+                    return Finish(started, messageCount);
                 }
-                screen = GameManager.Instance?.CurrentGameView;
+                string screen = GameManager.Instance?.CurrentGameView;
                 if (screen != Options.StageViewID)
                 {
-                    if (offStageSince < 0)
+                    if (started.AutoDirection != null && TryAnswerDirection(started.AutoDirection))
                     {
-                        offStageSince = timer.ElapsedMilliseconds;
+                        // "talk" etc.: the command asked which way; we were already told.
+                        started.AutoDirection = null;
+                        unreadableSince = -1;
+                        continue;
                     }
-                    else if (timer.ElapsedMilliseconds - offStageSince >= BlockedAfterMs)
+                    object prompt = TryDescribePopup();
+                    if (prompt != null && started.Answered != null && timer.ElapsedMilliseconds < AnsweredGraceMs
+                        && Newtonsoft.Json.JsonConvert.SerializeObject(prompt) == started.Answered)
                     {
-                        return "blocked";
+                        // Still the prompt we just answered; give it time to close. If it never does (the answer was
+                        // refused), it is reported after the grace period so the client sees nothing changed.
+                        prompt = null;
+                        unreadableSince = -1;
+                    }
+                    else if (prompt != null)
+                    {
+                        return new { result = "prompt", screen, log = MessageLog.Since(started.MessageSeq), prompt };
+                    }
+                    if (unreadableSince < 0)
+                    {
+                        unreadableSince = timer.ElapsedMilliseconds;
+                    }
+                    else if (timer.ElapsedMilliseconds - unreadableSince >= BlockedAfterMs)
+                    {
+                        return new
+                        {
+                            result = "blocked",
+                            screen,
+                            log = MessageLog.Since(started.MessageSeq),
+                            error = "the game is on a screen this API can't read yet (" + screen + ")",
+                        };
                     }
                 }
                 else
                 {
-                    offStageSince = -1;
+                    unreadableSince = -1;
+                    if (timer.ElapsedMilliseconds >= 100 && TryGame(IsPlayerReady))
+                    {
+                        return Finish(started, messageCount);
+                    }
                 }
                 if (timer.ElapsedMilliseconds >= ActionTimeoutMs)
                 {
-                    return "timeout";
+                    return new { result = "timeout", screen, log = MessageLog.Since(started.MessageSeq), error = "action did not finish within " + ActionTimeoutMs + "ms" };
                 }
                 Progress.Wait(50);
                 Progress.Reset();
+            }
+        }
+
+        private static bool TryAnswerDirection(string dir)
+        {
+            try
+            {
+                return UiThread.Invoke(() =>
+                {
+                    if (!PopupBridge.IsDirectionPrompt())
+                    {
+                        return false;
+                    }
+                    PopupBridge.AnswerDirection(dir);
+                    return true;
+                }, 500);
+            }
+            catch (GameThreadTimeoutException)
+            {
+                return false;
+            }
+        }
+
+        public static object TryDescribePopup()
+        {
+            try
+            {
+                return UiThread.Invoke(() =>
+                {
+                    return PopupBridge.DescribePrompt();
+                }, 500);
+            }
+            catch (GameThreadTimeoutException)
+            {
+                return null;
+            }
+        }
+
+        private static bool TryGame(Func<bool> probe)
+        {
+            try
+            {
+                return GameThread.Invoke(probe, 300);
+            }
+            catch (GameThreadTimeoutException)
+            {
+                return false;
             }
         }
     }

@@ -39,31 +39,13 @@ namespace QudBridge
             {
                 throw new GameThreadUnavailableException("game thread not started");
             }
-            var item = new WorkItem<T>(work);
+            var item = new QueuedWork<T>(work, ResetWake);
             queue.queueTask(item.Run);
             // In normal play the core thread sits in Keyboard.IdleWait (Keyboard.cs:926), which with
             // DisableAllIdleTileAnimations waits on KeyEvent with no timeout. Set it so the loop comes
-            // round to RenderBase and drains the queue; WorkItem.Run resets it afterwards.
+            // round to RenderBase and drains the queue; QueuedWork.Run (via ResetWake) resets it afterwards.
             Keyboard.KeyEvent.Set();
-            if (!item.Done.Wait(timeoutMs))
-            {
-                if (item.TryCancel())
-                {
-                    throw new GameThreadTimeoutException("game thread did not pick up the request within " + timeoutMs +
-                        "ms (no game loaded, game paused in the background, or a menu that doesn't pump the game queue)");
-                }
-                // Already running: it will finish on the game thread, but we stop waiting.
-                if (!item.Done.Wait(timeoutMs))
-                {
-                    throw new GameThreadTimeoutException("request started on the game thread but did not finish within " +
-                        (2 * timeoutMs) + "ms; it will complete in the background");
-                }
-            }
-            if (item.Error != null)
-            {
-                ExceptionDispatchInfo.Capture(item.Error).Throw();
-            }
-            return item.Result;
+            return item.Await(timeoutMs, "game thread");
         }
 
         // Fire-and-forget: queue work for the game thread without waiting for it.
@@ -98,51 +80,78 @@ namespace QudBridge
                 Keyboard.ResetIfQueuesEmpty();
             }
         }
+    }
 
-        private class WorkItem<T>
+    // One queued request: runs at most once, and a timed-out request is cancelled so it never runs late
+    // (important once requests have side effects). Shared by GameThread and UiThread.
+    internal class QueuedWork<T>
+    {
+        private const int Pending = 0, Running = 1, Cancelled = 2;
+
+        private readonly Func<T> Work;
+        private readonly Action After;
+        private int State = Pending;
+        public readonly ManualResetEventSlim Done = new ManualResetEventSlim(false);
+        public T Result;
+        public Exception Error;
+
+        public QueuedWork(Func<T> work, Action after = null)
         {
-            private const int Pending = 0, Running = 1, Cancelled = 2;
+            Work = work;
+            After = after;
+        }
 
-            private readonly Func<T> Work;
-            private int State = Pending;
-            public readonly ManualResetEventSlim Done = new ManualResetEventSlim(false);
-            public T Result;
-            public Exception Error;
+        public bool TryCancel()
+        {
+            return Interlocked.CompareExchange(ref State, Cancelled, Pending) == Pending;
+        }
 
-            public WorkItem(Func<T> work)
+        public void Run()
+        {
+            try
             {
-                Work = work;
-            }
-
-            // A timed-out request is cancelled so it never runs late (important once requests have side effects).
-            public bool TryCancel()
-            {
-                return Interlocked.CompareExchange(ref State, Cancelled, Pending) == Pending;
-            }
-
-            public void Run()
-            {
+                if (Interlocked.CompareExchange(ref State, Running, Pending) != Pending)
+                {
+                    return;
+                }
                 try
                 {
-                    if (Interlocked.CompareExchange(ref State, Running, Pending) != Pending)
-                    {
-                        return;
-                    }
-                    try
-                    {
-                        Result = Work();
-                    }
-                    catch (Exception ex)
-                    {
-                        Error = ex;
-                    }
-                    Done.Set();
+                    Result = Work();
                 }
-                finally
+                catch (Exception ex)
                 {
-                    ResetWake();
+                    Error = ex;
+                }
+                Done.Set();
+            }
+            finally
+            {
+                After?.Invoke();
+            }
+        }
+
+        // Wait, cancel if never started, and rethrow the work's own exception on the caller's thread.
+        public T Await(int timeoutMs, string threadName)
+        {
+            if (!Done.Wait(timeoutMs))
+            {
+                if (TryCancel())
+                {
+                    throw new GameThreadTimeoutException(threadName + " did not pick up the request within " + timeoutMs +
+                        "ms (no game loaded, game paused in the background, or a menu that doesn't pump the game queue)");
+                }
+                // Already running: it will finish, but we stop waiting.
+                if (!Done.Wait(timeoutMs))
+                {
+                    throw new GameThreadTimeoutException("request started on the " + threadName + " but did not finish within " +
+                        (2 * timeoutMs) + "ms; it will complete in the background");
                 }
             }
+            if (Error != null)
+            {
+                ExceptionDispatchInfo.Capture(Error).Throw();
+            }
+            return Result;
         }
     }
 }

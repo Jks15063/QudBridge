@@ -149,6 +149,9 @@ Body: a JSON object with a `type` and type-specific fields.
 | `stairs` | `dir`: `up` / `down` | `CmdMoveU` / `CmdMoveD`. `down` requires stairs down on your cell (or the world map); `up` off stairs on the surface goes to the world map, as `<` does in-game. |
 | `eat` / `drink` / `equip` / `unequip` | `item` or `slot` | the item's inventory action (`equip` = "equip (auto)", `unequip` = "remove") |
 | `item` | `item` or `slot`, `verb` | any inventory action of that item, by name or menu text (`"drop"`, `"apply"`, `"read"`, ...) |
+| `getfrom` | `dir` | `CmdGetFrom<dir>`: take from a container (e.g. a chest) in that direction |
+| `talk` | `dir` | `CmdTalk`; the "which direction?" prompt is answered with `dir` for you |
+| `choose` | see [Prompts](#prompts) | answers the open popup/menu |
 
 `dir` is one of `N S E W NE NW SE SW`. `item` is an index from `state.inventory[].i`; `slot` is a
 label from `state.equipped[].slot` (e.g. `"Right Hand"`).
@@ -158,22 +161,19 @@ $ curl -s -X POST http://localhost:15600/action -d '{"type":"move","dir":"N"}'
 {"result":"ok","turns":1,"log":["You pass by a door."],"state":{ ...same as GET /state... }}
 ```
 
-- `turns`: game turns that passed. Can be `0` even for a real action: with quickness above 100 the
-  player sometimes acts twice in one game turn. Actions that take no time (unequip, bumping a wall,
-  attacking an empty cell) also give `0`.
-- `log`: message-log lines added during the action, including failure messages ("You can't...").
-- `state`: `GET /state` with the default 15 messages.
+`result` is one of:
 
-If the action opens a popup or menu, the game waits for input that this API can't give yet. The
-action itself has usually happened; the popup is often just its result message. Seen in testing:
-`eat` and `drink` (result message), `drop` of a stack ("how many?", `DynamicPopupMessage`), and
-`stairs` `down` from the world map. Until popups are supported, close them in-game.
-
-```
-{"result":"blocked","screen":"PopupMessage","error":"the game is waiting on a popup or menu (PopupMessage); popups are not supported yet"}
-```
-
-`"result":"timeout"` means the action didn't finish within 15 s. Neither case includes `state`.
+- `ok`: it's the player's turn again. Includes `turns`, `log` and `state`.
+  - `turns`: game turns that passed. Can be `0` even for a real action: with quickness above 100
+    the player sometimes acts twice in one game turn. Actions that take no time (unequip, bumping a
+    wall, attacking an empty cell) also give `0`.
+  - `log`: message-log lines added since the request started, including failure messages.
+  - `state`: `GET /state` with the default 15 messages.
+- `prompt`: the game is waiting on a popup or menu. Includes `screen`, `log` and `prompt` (see
+  below); answer it with `choose`. The action itself has often already happened and the popup is
+  its result message (eating, drinking).
+- `blocked`: the game is on a screen this API can't read (e.g. the inventory screen); `screen` names it.
+- `timeout`: nothing settled within 15 s.
 
 Unknown verbs list what's available:
 
@@ -187,7 +187,89 @@ Rejections (nothing happens in-game):
 | Status | When |
 |---|---|
 | 400 | Bad JSON, unknown `type`/`dir`/`verb`, bad `item`/`slot` |
-| 409 | No game, not in normal play (`screen` isn't `Stage`), not the player's turn, another action in progress, or the action isn't possible ("no stairs down here", "cannot eat ... right now") |
+| 409 | No game, not in normal play (`screen` isn't `Stage`; only `choose` is allowed then), not the player's turn, another action in progress, `choose` with nothing open, or the action isn't possible ("no stairs down here", "cannot eat ... right now") |
+
+## Prompts
+
+While a popup or menu is open the game thread is waiting on it, so `GET /state` returns the prompt
+instead of the game state:
+
+```
+$ curl -s http://localhost:15600/state
+{"screen":"PopupMessage","prompt":{"kind":"popup","title":"Select a destination","text":"",
+ "options":[{"i":0,"text":"Current location (C)"},{"i":1,"text":"Center (C)"}],
+ "buttons":[{"i":0,"text":"[Esc] Cancel","command":"Cancel"}]}}
+```
+
+It returns `409 {"error":"the game is on a screen this API can't read yet","screen":...}` for other
+screens. Answer with `POST /action {"type":"choose", ...}`; it waits like any action and returns
+`ok` (back to normal play) or the next `prompt` (e.g. the next line of a conversation).
+
+### `kind: "popup"`
+
+Message boxes, yes/no questions, option lists, conversations, item action menus, and number/text
+prompts. Fields: `title` (the speaker, in conversations), `text`, `options`, `buttons`, and `input`
+(`{"value":"251","numeric":true}`) when it asks for a value. `anyKey: true` means it has no
+options or buttons and closes on any key. `id` is the game's popup ID when set
+(`"Conversation:Tam, dromad merchant"`).
+
+| `choose` with | Does |
+|---|---|
+| `"option": i` | picks `options[i]` (conversation reply, menu entry) |
+| `"button": i` or `"button": "Cancel"` | presses a button, by index, `command`, or end of its text |
+| `"text": "1"` | types into `input` and submits (e.g. "How many do you want to drop?") |
+| nothing | dismisses an `anyKey` popup |
+
+```
+$ curl -s -X POST http://localhost:15600/action -d '{"type":"talk","dir":"E"}'
+{"result":"prompt","screen":"PopupMessage","log":[],"prompt":{"kind":"popup","id":"Conversation:W4Lbreaker",
+ "title":"W4Lbreaker","text":"Greetings, organic. ...","options":[{"i":0,"text":"Yes, please help!"}, ...,
+ {"i":5,"text":"Oh. Well I should be going. [End]"}],"buttons":[{"i":0,"text":"Look","command":"Look"},
+ {"i":1,"text":"[Tab] Trade","command":"trade"},{"i":2,"text":"[Esc] Cancel","command":"Cancel"}]}}
+$ curl -s -X POST http://localhost:15600/action -d '{"type":"choose","option":5}'
+{"result":"ok","turns":0,"log":[],"state":{...}}
+```
+
+### `kind: "direction"`
+
+"Which direction?" (e.g. after a command that targets an adjacent cell). `text` is the game's label.
+Answer with `"dir"`: one of the eight directions, `"self"`, or `"cancel"`.
+
+### `kind: "pick"`
+
+The item list shown when picking up from a cell with several items, or opening a container.
+`options` are the items; `buttons` is a subset of `take all`, `store`, `cancel`.
+
+```
+{"kind":"pick","title":"Select an item","options":[{"i":0,"text":"beetle jerky [1 serving]"},
+ {"i":1,"text":"waterskin [empty]"}],"buttons":["take all","cancel"]}
+```
+
+`{"option": i}` selects an item, which opens its action menu as a `popup` (choose `get`); the
+list then reopens with what's left. `{"button": "take all"}` takes everything: from a cell the game
+does this as an auto-action over the next moment, so the response's `log` can come back before the
+"You take ..." lines (they show up in the next `/state`).
+
+### `kind: "trade"`
+
+The trade screen (a merchant's "Let's trade", or storing into a container: `mode` `trade` /
+`container`).
+
+```
+{"kind":"trade","mode":"trade","trader":"Tam, dromad merchant","traderDrams":171,"yourDrams":30,
+ "theirs":[{"i":2,"name":"lead slug x37 PV4 DMG1d2","count":37,"price":0.03,"selected":1}, ...],
+ "yours":[{"i":3,"name":"beetle jerky [1 serving]","count":1,"price":0.35,"selected":0}, ...],
+ "totals":{"buy":0.03,"sell":0.0,"youPay":1},"buttons":["offer","cancel"]}
+```
+
+`price` is per item in drams of water. `totals.youPay` is the drams the offer costs you (negative:
+they pay you).
+
+| `choose` with | Does |
+|---|---|
+| `"side": "theirs"`/`"yours"`, `"item": i`, `"count": n` | sets how many of that item to trade (clamped to the stack; trading away an important item asks first) |
+| `"button": "offer"` | offers the trade (may raise confirmation popups) |
+| `"button": "cancel"` | leaves the trade screen |
 
 ## Errors
 

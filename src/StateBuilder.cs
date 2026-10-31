@@ -94,7 +94,7 @@ namespace QudBridge
             return new
             {
                 // Same name source as the status bar (Qud.UI/PlayerStatusBar.cs:328).
-                name = player.DisplayNameOnlyDirect.Strip(),
+                name = Clean(player.DisplayNameOnlyDirect),
                 hp = player.hitpoints,
                 maxHp = player.baseHitpoints,
                 level,
@@ -116,14 +116,14 @@ namespace QudBridge
                     ms = player.Stat("MoveSpeed"),
                 },
                 // Stomach.FoodStatus/WaterStatus (XRL.World.Parts/Stomach.cs:87/104).
-                food = stomach?.FoodStatus().Strip(),
-                water = stomach?.WaterStatus().Strip(),
+                food = Clean(stomach?.FoodStatus()),
+                water = Clean(stomach?.WaterStatus()),
                 weight = player.GetCarriedWeight(),
                 maxWeight = player.GetMaxCarriedWeight(),
                 zone = zone == null ? null : new
                 {
                     id = zone.ZoneID,
-                    name = zone.DisplayName.Strip(),
+                    name = Clean(zone.DisplayName),
                     worldMap = zone.IsWorldMap(),
                 },
                 x = cell?.X,
@@ -380,7 +380,7 @@ namespace QudBridge
             {
                 return s;
             }
-            s = s.Strip();
+            s = StripMarkup(s);
             var sb = new System.Text.StringBuilder(s.Length + 8);
             foreach (char c in s)
             {
@@ -391,8 +391,56 @@ namespace QudBridge
                     case '\u0004': sb.Append("AV"); break;  // ♦ armor value
                     case '\t': sb.Append("DV"); break;      // ○ dodge value
                     case '\n': sb.Append(c); break;
+                    case '\r': break;                       // conversation text uses \r\n
                     default: sb.Append(c < ' ' ? Cp437Low[c] : c); break;
                 }
+            }
+            return sb.ToString();
+        }
+
+        // Removes Qud markup, following ColorUtility.GetNext (ConsoleLib.Console/ColorUtility.cs): "{{spec|text}}"
+        // (nestable), "&X" foreground and "^X" background codes, with "&&"/"^^" as literal characters. Our own
+        // copy because ColorUtility.StripFormatting shares one static StringBuilder (ColorUtility.cs:179) and
+        // isn't safe to call off the game's threads. One addition: a "{{[W|" spec draws a '[' (hotkey labels,
+        // e.g. "{{[W|Tab]}} Trade", Qud.UI/PopupMessage.cs:697), which StripFormatting drops.
+        private static string StripMarkup(string text)
+        {
+            var sb = new System.Text.StringBuilder(text.Length);
+            int depth = 0;
+            int i = 0;
+            int n = text.Length;
+            while (i < n)
+            {
+                char c = text[i];
+                if (i + 1 < n && c == '{' && text[i + 1] == '{')
+                {
+                    depth++;
+                    i += 2;
+                    if (i < n && text[i] == '[')
+                    {
+                        sb.Append('[');
+                    }
+                    int bar = text.IndexOf('|', i);
+                    i = bar < 0 ? n : bar + 1;
+                    continue;
+                }
+                if (depth > 0 && i + 1 < n && c == '}' && text[i + 1] == '}')
+                {
+                    depth--;
+                    i += 2;
+                    continue;
+                }
+                if ((c == '&' || c == '^') && i + 1 < n)
+                {
+                    if (text[i + 1] == c)
+                    {
+                        sb.Append(c);
+                    }
+                    i += 2;
+                    continue;
+                }
+                sb.Append(c);
+                i++;
             }
             return sb.ToString();
         }
@@ -447,7 +495,7 @@ namespace QudBridge
                     dist = c.DistanceTo(player),
                     attitude = Attitude(c, player),
                     // Strings.WoundLevel (XRL.Rules/Strings.cs:83): exact HP only with scanning, else "Wounded" etc.
-                    health = NullIfEmpty(Strings.WoundLevel(c).Strip()),
+                    health = NullIfEmpty(Clean(Strings.WoundLevel(c))),
                 });
             }
             return list;
@@ -497,7 +545,7 @@ namespace QudBridge
             {
                 if (part.Equipped != null && part.IsFirstSlotForEquipped())
                 {
-                    list.Add(new { slot = part.GetCardinalDescription().Strip(), name = Clean(part.Equipped.DisplayName) });
+                    list.Add(new { slot = Clean(part.GetCardinalDescription()), name = Clean(part.Equipped.DisplayName) });
                 }
             }
             return list;
