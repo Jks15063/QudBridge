@@ -150,7 +150,36 @@ namespace QudBridge
                     WriteJson(context, 200, new { body.thread, body.isCoreThread, body.gameRunning, body.turns, body.player, ms = timer.ElapsedMilliseconds });
                     return;
                 }
+                if (path == "/state")
+                {
+                    if (request.HttpMethod != "GET")
+                    {
+                        WriteJson(context, 405, new { error = "method not allowed" });
+                        return;
+                    }
+                    int messages = StateBuilder.DefaultMessages;
+                    string m = request.QueryString["messages"];
+                    if (m != null && (!int.TryParse(m, out messages) || messages < 0))
+                    {
+                        WriteJson(context, 400, new { error = "messages must be a non-negative integer" });
+                        return;
+                    }
+                    bool legend = request.QueryString["legend"] == "1";
+                    // Fast path off the game thread: the main menu doesn't pump gameQueue, so without this the
+                    // request would sit there until the 504. Only reads a reference and a bool, never mutates;
+                    // StateBuilder repeats the check on the game thread.
+                    if (!(XRL.The.Game?.Running ?? false))
+                    {
+                        throw new NoGameException("no game in progress (screen: " + (GameManager.Instance?.CurrentGameView ?? "unknown") + ")");
+                    }
+                    WriteJson(context, 200, GameThread.Invoke(() => StateBuilder.Build(messages, legend)));
+                    return;
+                }
                 WriteJson(context, 404, new { error = "not found", path = request.Url.AbsolutePath });
+            }
+            catch (NoGameException ex)
+            {
+                WriteJson(context, 409, new { error = ex.Message });
             }
             catch (GameThreadUnavailableException ex)
             {
@@ -167,9 +196,15 @@ namespace QudBridge
             }
         }
 
+        // Omit nulls to keep responses compact (they're fed to an LLM).
+        private static readonly JsonSerializerSettings JsonSettings = new JsonSerializerSettings
+        {
+            NullValueHandling = NullValueHandling.Ignore,
+        };
+
         private static void WriteJson(HttpListenerContext context, int status, object body)
         {
-            byte[] bytes = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(body));
+            byte[] bytes = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(body, JsonSettings));
             var response = context.Response;
             response.StatusCode = status;
             response.ContentType = "application/json; charset=utf-8";
