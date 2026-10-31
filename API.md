@@ -60,6 +60,9 @@ Query parameters:
 |---|---|---|
 | `messages` | `15` | Number of most recent message-log lines to include (`0` for none). |
 | `legend` | off | `legend=1` adds `map.legend` (the symbol table below). |
+| `view` | whole zone | `view=N` sends only the map within N cells of the player (clipped at the zone edges), with `map.x0`/`map.y0`: `rows[j][i]` is cell `(x0+i, y0+j)`. `w`/`h` stay the zone size. The `creatures`/`items`/`features` lists are not cropped. On the world map the legend keeps only symbols in the window. `view=8` cut a 4.4 KB state to 2.6 KB. |
+
+`POST /action` takes the same parameters for the `state` it returns (e.g. `/action?view=8&messages=5`).
 
 ```
 $ curl -s 'http://localhost:15600/state?messages=3'

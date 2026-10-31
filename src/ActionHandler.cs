@@ -135,12 +135,12 @@ namespace QudBridge
             }
         }
 
-        public static object Handle(JObject body, int messageCount)
+        public static object Handle(JObject body, StateOptions stateOptions)
         {
             if (string.Equals((string)body["type"], "stop", StringComparison.OrdinalIgnoreCase))
             {
                 // Not under ActionLock: the request that started the auto-action is usually still waiting for it.
-                return Stop(messageCount);
+                return Stop(stateOptions);
             }
             if (!Monitor.TryEnter(ActionLock))
             {
@@ -148,7 +148,7 @@ namespace QudBridge
             }
             try
             {
-                return Run(body, messageCount);
+                return Run(body, stateOptions);
             }
             finally
             {
@@ -159,7 +159,7 @@ namespace QudBridge
         // Interrupts a running auto-action (explore, travel, rest, long wait), as any keypress does in-game.
         // gameQueue is pumped between its steps (RenderBase), so this gets in. The request that started it then
         // returns with the "You stop ... because you told it to." line in its log.
-        private static object Stop(int messageCount)
+        private static object Stop(StateOptions stateOptions)
         {
             return GameThread.Invoke(() =>
             {
@@ -173,7 +173,7 @@ namespace QudBridge
                 }
                 long seq = MessageLog.LastSeq;
                 AutoAct.Interrupt("you told it to");
-                return new { result = "stopped", log = MessageLog.Since(seq), state = StateBuilder.Build(messageCount, includeLegend: false) };
+                return new { result = "stopped", log = MessageLog.Since(seq), state = StateBuilder.Build(stateOptions) };
             });
         }
 
@@ -203,7 +203,7 @@ namespace QudBridge
             };
         }
 
-        private static object Run(JObject body, int messageCount)
+        private static object Run(JObject body, StateOptions stateOptions)
         {
             string type = ((string)body["type"])?.ToLowerInvariant();
             if (string.IsNullOrEmpty(type))
@@ -254,10 +254,10 @@ namespace QudBridge
                     return s;
                 });
             }
-            return Settle(started, messageCount);
+            return Settle(started, stateOptions);
         }
 
-        private static object Finish(Started started, int messageCount)
+        private static object Finish(Started started, StateOptions stateOptions)
         {
             return GameThread.Invoke(() =>
             {
@@ -268,7 +268,7 @@ namespace QudBridge
                     turns = The.Game.Turns - started.Turn,
                     look = started.Look,
                     log = MessageLog.Since(started.MessageSeq),
-                    state = StateBuilder.Build(messageCount, includeLegend: false),
+                    state = StateBuilder.Build(stateOptions),
                 };
             });
         }
@@ -632,7 +632,7 @@ namespace QudBridge
         //    weren't caused by an action, e.g. the HP warning at the top of PlayerTurn, XRLCore.cs:771);
         //  - a popup is waiting for an answer (UI-thread probe) -> returned so the client can "choose";
         //  - the view stays on a screen we can't read -> "blocked".
-        private static object Settle(Started started, int messageCount)
+        private static object Settle(Started started, StateOptions stateOptions)
         {
             var timer = System.Diagnostics.Stopwatch.StartNew();
             long unreadableSince = -1;
@@ -649,7 +649,7 @@ namespace QudBridge
                 }
                 else if (beginTurns != started.BeginTurns || readyMarks != started.ReadyMarks)
                 {
-                    return Finish(started, messageCount);
+                    return Finish(started, stateOptions);
                 }
                 string screen = GameManager.Instance?.CurrentGameView;
                 if (screen != Options.StageViewID)
@@ -699,7 +699,7 @@ namespace QudBridge
                     unreadableSince = -1;
                     if (!busy && timer.ElapsedMilliseconds >= 100 && TryGame(IsPlayerReady))
                     {
-                        return Finish(started, messageCount);
+                        return Finish(started, stateOptions);
                     }
                 }
                 if (timer.ElapsedMilliseconds >= started.TimeoutMs)

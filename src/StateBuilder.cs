@@ -15,6 +15,15 @@ namespace QudBridge
         public NoGameException(string message) : base(message) { }
     }
 
+    // Query parameters shared by GET /state and POST /action (BridgeServer.ParseStateOptions).
+    public class StateOptions
+    {
+        public int Messages = StateBuilder.DefaultMessages;
+        public bool Legend;
+        // Map window radius around the player; null for the whole zone.
+        public int? View;
+    }
+
     // Builds the GET /state snapshot. Must run on the game thread (via GameThread.Invoke). Read-only:
     // avoids GameObject.ID, which assigns and stores an id on first read (XRL.World/GameObject.cs:436).
     public static class StateBuilder
@@ -25,8 +34,10 @@ namespace QudBridge
         // Creature keys on the map, in list order (nearest first).
         private const string CreatureKeys = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-        public static object Build(int messageCount, bool includeLegend)
+        public static object Build(StateOptions options)
         {
+            int messageCount = options.Messages;
+            bool includeLegend = options.Legend;
             XRLGame game = The.Game;
             GameObject player = The.Player;
             string screen = GameManager.Instance?.CurrentGameView;
@@ -51,6 +62,34 @@ namespace QudBridge
                 rows = BuildMap(zone, player, creatures, items, features);
             }
 
+            // The window: rows y0.., columns x0.. of the zone, clipped to it.
+            int x0 = 0, y0 = 0;
+            if (rows != null && options.View.HasValue)
+            {
+                int r = options.View.Value;
+                x0 = Math.Max(0, playerCell.X - r);
+                y0 = Math.Max(0, playerCell.Y - r);
+                int x1 = Math.Min(zone.Width - 1, playerCell.X + r), y1 = Math.Min(zone.Height - 1, playerCell.Y + r);
+                var cropped = new string[y1 - y0 + 1];
+                for (int y = y0; y <= y1; y++)
+                {
+                    cropped[y - y0] = rows[y].Substring(x0, x1 - x0 + 1);
+                }
+                rows = cropped;
+                if (worldLegend != null)
+                {
+                    var kept = new Dictionary<string, string>();
+                    foreach (var kv in worldLegend)
+                    {
+                        if (Array.Exists(rows, row => row.Contains(kv.Key)))
+                        {
+                            kept[kv.Key] = kv.Value;
+                        }
+                    }
+                    worldLegend = kept;
+                }
+            }
+
             return new
             {
                 // GameManager.CurrentGameView (GameManager.cs:469); "Stage" (Options.StageViewID) is normal play.
@@ -62,6 +101,9 @@ namespace QudBridge
                 {
                     w = zone.Width,
                     h = zone.Height,
+                    // Only with ?view: rows[j][i] is cell (x0 + i, y0 + j).
+                    x0 = options.View.HasValue ? x0 : (int?)null,
+                    y0 = options.View.HasValue ? y0 : (int?)null,
                     // The world map's symbols are assigned per response, so its legend is always included.
                     legend = worldLegend ?? (includeLegend ? Legend : null),
                     rows,

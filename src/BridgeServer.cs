@@ -116,6 +116,28 @@ namespace QudBridge
             lock (Lock) return ReferenceEquals(Listener, listener);
         }
 
+        // ?messages=N, ?legend=1, ?view=N (see API.md, GET /state).
+        private static StateOptions ParseStateOptions(HttpListenerRequest request)
+        {
+            var options = new StateOptions();
+            string m = request.QueryString["messages"];
+            if (m != null && (!int.TryParse(m, out options.Messages) || options.Messages < 0))
+            {
+                throw new ActionRejectedException(400, "messages must be a non-negative integer");
+            }
+            options.Legend = request.QueryString["legend"] == "1";
+            string v = request.QueryString["view"];
+            if (v != null)
+            {
+                if (!int.TryParse(v, out int view) || view < 0)
+                {
+                    throw new ActionRejectedException(400, "view must be a non-negative integer");
+                }
+                options.View = view;
+            }
+            return options;
+        }
+
         private static void Handle(HttpListenerContext context)
         {
             try
@@ -158,14 +180,7 @@ namespace QudBridge
                         WriteJson(context, 405, new { error = "method not allowed" });
                         return;
                     }
-                    int messages = StateBuilder.DefaultMessages;
-                    string m = request.QueryString["messages"];
-                    if (m != null && (!int.TryParse(m, out messages) || messages < 0))
-                    {
-                        WriteJson(context, 400, new { error = "messages must be a non-negative integer" });
-                        return;
-                    }
-                    bool legend = request.QueryString["legend"] == "1";
+                    StateOptions options = ParseStateOptions(request);
                     // Fast path off the game thread: the main menu doesn't pump gameQueue, so without this the
                     // request would sit there until the 504. Only reads a reference and a bool, never mutates;
                     // StateBuilder repeats the check on the game thread.
@@ -197,7 +212,7 @@ namespace QudBridge
                         WriteJson(context, 409, new { error = "the game is on a screen this API can't read yet", screen });
                         return;
                     }
-                    WriteJson(context, 200, GameThread.Invoke(() => StateBuilder.Build(messages, legend)));
+                    WriteJson(context, 200, GameThread.Invoke(() => StateBuilder.Build(options)));
                     return;
                 }
                 if (path == "/character")
@@ -244,6 +259,7 @@ namespace QudBridge
                         WriteJson(context, 400, new { error = "body must be a JSON object: " + ex.Message });
                         return;
                     }
+                    StateOptions actionOptions = ParseStateOptions(request);
                     bool closingSummary = GameManager.Instance?.CurrentGameView == GameOver.SummaryView
                         && string.Equals((string)body["type"], "choose", StringComparison.OrdinalIgnoreCase);
                     if (!(XRL.The.Game?.Running ?? false) && !closingSummary)
@@ -258,7 +274,7 @@ namespace QudBridge
                     {
                         throw new ActionRejectedException(409, "not in normal play (screen: " + view + ")");
                     }
-                    WriteJson(context, 200, ActionHandler.Handle(body, StateBuilder.DefaultMessages));
+                    WriteJson(context, 200, ActionHandler.Handle(body, actionOptions));
                     return;
                 }
                 WriteJson(context, 404, new { error = "not found", path = request.Url.AbsolutePath });

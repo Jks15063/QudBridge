@@ -214,7 +214,10 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
 10. Done 2026-10-30: `look {x,y}` (src/Looking.cs; `Look.GenerateTooltipInformation`, then the
    AfterLookedAt/LookedAt events as the looker fires them). Verified on a dragonfly, the player's cell,
    empty, unseen and outside cells (distinct errors). Items: the existing `item` verb `look` returns the description popup (verified).
-11. `/state` size (~5 KB, mostly the 80x25 map): an option for a window around the player.
+11. Done 2026-10-30: `?view=N` on `/state` and `/action` crops the map to a window around the player
+   (`map.x0`/`y0`); `messages`/`legend` also work on `/action` now (StateOptions). Verified: view 8
+   (clipped at the bottom edge), view 0, on an action, bad values. The rest of the ~2.3 KB is
+   inventory, equipment and lists.
 12. Out-of-view objects aren't listed (remembered cells show terrain only).
 13. Inventory indices shift when inventory changes; stable IDs would need `GameObject.ID` (writes the save).
 14. The milestone-2 "QudBridge active" message clutters `messages`.
