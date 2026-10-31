@@ -67,5 +67,5 @@ tested in-game: multi-page books, terminals, the number screen and tinkering wit
 
 ## License
 
-[MIT](LICENSE). Caves of Qud is © Freehold Games; this repository contains none of the game's code
-or assets.
+[MIT](LICENSE), for this mod's own code. Caves of Qud is © Freehold Games; the game and its assets
+aren't included, and you need your own copy to use the mod.
