@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using System.Threading;
 using Newtonsoft.Json.Linq;
 using Qud.UI;
 
@@ -176,6 +177,10 @@ namespace QudBridge
             TradeScreen trade = TradeBridge.Screen();
             if (trade != null)
             {
+                if (Volatile.Read(ref TradeBridge.Offering) > 0)
+                {
+                    return null;
+                }
                 return TradeBridge.Describe(trade);
             }
             // Books, terminals, the gamepad number prompt.

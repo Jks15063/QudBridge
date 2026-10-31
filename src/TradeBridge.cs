@@ -1,8 +1,12 @@
 using System.Collections.Generic;
+using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using Qud.UI;
 using XRL;
 using XRL.UI;
+using XRL.UI.Framework;
 
 namespace QudBridge
 {
@@ -69,13 +73,60 @@ namespace QudBridge
             return list;
         }
 
+        // Non-zero while an offer is being carried out. The trade screen stays up, unchanged, between the
+        // confirmation popup closing and "Trade complete!" opening (items move in between), so it isn't reported
+        // as a prompt then; popups raised during the offer still are (PopupBridge.DescribePrompt checks them first).
+        public static int Offering;
+
+        private static readonly FieldInfo MenuComplete = typeof(TradeScreen).GetField("menucomplete", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        // TradeScreen.HandleMenuOption's OFFER_TRADE branch (Qud.UI/TradeScreen.cs:840), copied so we know when it
+        // ends: the original is async void. Started on the UI thread, so the continuation runs there too.
+        private static async void Offer(TradeScreen screen)
+        {
+            try
+            {
+                screen.UpdateTotals();
+                int difference = TradeUI.CalculateTrade(screen.Totals[0], screen.Totals[1]);
+                TutorialManager.OnTradeOffer();
+                TradeUI.TradeScreenMode mode = screen.mode;
+                List<TradeEntry>[] entries = screen.tradeEntries;
+                TradeUI.OfferStatus status = await APIDispatch.RunAndWaitAsync(() =>
+                    TradeUI.PerformOffer(difference, forceComplete: false, TradeScreen.Trader, mode, entries, TradeScreen.NumberSelected));
+                TutorialManager.OnTradeComplete();
+                switch (status)
+                {
+                    case TradeUI.OfferStatus.NEXT:
+                        return;
+                    case TradeUI.OfferStatus.REFRESH:
+                    case TradeUI.OfferStatus.TOP:
+                        screen.ClearAndSetupTradeUI();
+                        screen.UpdateViewFromData();
+                        return;
+                    case TradeUI.OfferStatus.CLOSE:
+                        screen.Hide();
+                        break;
+                }
+                screen.Cleanup();
+                (MenuComplete?.GetValue(screen) as TaskCompletionSource<TradeUI.OfferStatus>)?.TrySetResult(status);
+            }
+            catch (System.Exception e)
+            {
+                MetricsManager.LogError("QudBridge: trade offer failed", e);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref Offering);
+            }
+        }
+
         public static string Choose(TradeScreen screen, JObject body)
         {
             string button = ((string)body["button"])?.ToLowerInvariant();
             if (button == "offer")
             {
-                // Same as the offer hotkey (TradeScreen.HandleOfferTrade, line 754); may raise confirmation popups.
-                screen.HandleOfferTrade();
+                Interlocked.Increment(ref Offering);
+                Offer(screen);
                 return "offer";
             }
             if (button == "cancel")

@@ -693,8 +693,9 @@ namespace QudBridge
                         // The end screen was closed (or the game otherwise ended): nothing more will happen.
                         return new { result = "ended", screen, log = MessageLog.Since(started.MessageSeq), lastGame = GameOver.Last };
                     }
-                    if (unreadableSince < 0)
+                    if (unreadableSince < 0 || Volatile.Read(ref TradeBridge.Offering) > 0)
                     {
+                        // A trade offer still moving items isn't "blocked"; see TradeBridge.Offering.
                         unreadableSince = timer.ElapsedMilliseconds;
                     }
                     else if (timer.ElapsedMilliseconds - unreadableSince >= BlockedAfterMs)

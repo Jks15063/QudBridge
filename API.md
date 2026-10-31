@@ -378,7 +378,7 @@ they pay you).
 | `choose` with | Does |
 |---|---|
 | `"side": "theirs"`/`"yours"`, `"item": i`, `"count": n` | sets how many of that item to trade (clamped to the stack; trading away an important item asks first) |
-| `"button": "offer"` | offers the trade (may raise confirmation popups) |
+| `"button": "offer"` | offers the trade. The trader may ask first (e.g. "Tam will have to pony up 1 dram ... Agreed?", answer `Yes`); a completed trade ends with a "Trade complete!" popup, after which the trade screen reopens with the new contents and drams |
 | `"button": "cancel"` | leaves the trade screen |
 
 ### `kind: "book"`

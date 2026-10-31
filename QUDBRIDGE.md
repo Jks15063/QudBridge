@@ -197,8 +197,12 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
    moving.", 1 turn), `rest` and `wait turns` refused with a popup, no turn used; `move` into a
    hostile croc attacks it (hit, block and the croc's bite in one response; killed in 2 turns).
    Crocs submerge and drop out of `creatures` until they surface next to you.
-4. Untested paths (`choose {"dir":...}` on a direction prompt now verified via Shield Slam): `getfrom` on a container
-   (Joppa chests are villagers' property, so taking is stealing), trade `offer`, storing into a container.
+4. Trade `offer` verified 2026-10-30 with Tam (bought 9 lead slugs, sold waterskins; the "pony up" confirmation,
+   "Trade complete!", refreshed screen). Fixed: the offer branch is copied into TradeBridge.Offer (the game's is
+   async void) so the stale trade screen isn't reported between the confirmation and "Trade complete!".
+   `getfrom` reaches the chest's menu and the ownership prompt (answered No: opening an owned container sends a
+   Trespass help broadcast, Container.cs:121, and taking is Theft). Untested: taking from / storing into an
+   unowned container.
 5. Ranged combat: `fire {x,y}` and `reload` done (verified 2026-10-30; target passed straight to
    `Combat.FireMissileWeapon`, no picker). `throw {x,y}` done 2026-10-30 (`Combat.ThrowWeapon` with
    the target; verified with torches, 1 turn each).
