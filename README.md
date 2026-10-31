@@ -64,3 +64,8 @@ The server listens on `http://localhost:15600` (loopback only) from mod load unt
 
 Version 0.1.0. Built and tested against the Steam release of Caves of Qud on Windows. Not yet
 tested in-game: multi-page books, terminals, the number screen and tinkering with recipes.
+
+## License
+
+[MIT](LICENSE). Caves of Qud is © Freehold Games; this repository contains none of the game's code
+or assets.
