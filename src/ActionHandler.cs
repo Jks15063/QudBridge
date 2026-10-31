@@ -69,9 +69,17 @@ namespace QudBridge
                 return;
             }
             HooksRegistered = true;
+            // PlayerTurn runs (and calls this, XRLCore.cs:693) for every step of an auto-action too ("take all",
+            // auto-explore, walking), so a turn only counts as new once no auto-action is running; Settle then
+            // returns after the whole auto-action instead of after its first step.
             XRLCore.RegisterOnBeginPlayerTurnCallback(_ =>
             {
                 Interlocked.Exchange(ref LastTurn, The.Game?.Turns ?? 0);
+                if (AutoAct.IsActive())
+                {
+                    Progress.Set();
+                    return;
+                }
                 Interlocked.Increment(ref BeginTurns);
                 Progress.Set();
             });
@@ -227,7 +235,18 @@ namespace QudBridge
                     Command("CmdMove" + Direction(body));
                     return null;
                 case "attack":
-                    Command("CmdAttack" + Direction(body));
+                {
+                    string dir = Direction(body);
+                    RequireMeleeTarget(dir);
+                    Command("CmdAttack" + dir);
+                    return null;
+                }
+                case "fire":
+                    Fire(body);
+                    return null;
+                case "reload":
+                    // CommandReloadEvent (XRLCore.cs:2225); "nothing to reload" etc. show up in the log.
+                    Command("CmdReload");
                     return null;
                 case "wait":
                     Command("CmdWait");
@@ -264,8 +283,86 @@ namespace QudBridge
                     return null;
                 default:
                     throw new ActionRejectedException(400, "unknown action type \"" + type + "\"",
-                        new { types = new[] { "move", "attack", "wait", "pickup", "getfrom", "stairs", "eat", "drink", "equip", "unequip", "item", "talk", "choose" } });
+                        new { types = new[] { "move", "attack", "fire", "reload", "wait", "pickup", "getfrom", "stairs", "eat", "drink", "equip", "unequip", "item", "talk", "choose" } });
             }
+        }
+
+        // The game's AttackDirection silently does nothing (no message, no time) when the cell has no target it
+        // can reach (Combat.AttackCell, GameObject.AttackDirection's swoop check), so say why instead.
+        private static void RequireMeleeTarget(string dir)
+        {
+            GameObject player = The.Player;
+            Cell cell = player.CurrentCell?.GetCellFromDirection(dir, BuiltOnly: false);
+            if (cell == null)
+            {
+                throw new ActionRejectedException(409, "no cell in that direction");
+            }
+            if (cell.GetCombatTarget(player) != null)
+            {
+                return;
+            }
+            GameObject flyer = cell.GetCombatTarget(player, IgnoreFlight: true);
+            if (flyer != null && !player.IsFlying)
+            {
+                throw new ActionRejectedException(409, "can't reach " + StateBuilder.Clean(flyer.DisplayNameOnly) + " in melee: it is flying (use \"fire\")");
+            }
+            throw new ActionRejectedException(409, "nothing to attack there");
+        }
+
+        // Fires the equipped missile weapons at a cell, as CmdFire does (XRLCore.cs:1859) but with the target given,
+        // which skips the game's targeting UI (Combat.FireMissileWeapon with TargetCell, Combat.cs:409).
+        private static void Fire(JObject body)
+        {
+            GameObject player = The.Player;
+            JToken jx = body["x"], jy = body["y"];
+            if (jx == null || jy == null || jx.Type != JTokenType.Integer || jy.Type != JTokenType.Integer)
+            {
+                throw new ActionRejectedException(400, "give the target cell as \"x\" and \"y\" (e.g. a creature's position from state.creatures)");
+            }
+            Zone zone = player.CurrentZone;
+            if (zone == null || zone.IsWorldMap())
+            {
+                throw new ActionRejectedException(409, "cannot fire on the world map");
+            }
+            Cell target = zone.GetCell((int)jx, (int)jy);
+            if (target == null)
+            {
+                throw new ActionRejectedException(400, "(" + jx + "," + jy + ") is outside the map");
+            }
+            if (target == player.CurrentCell)
+            {
+                throw new ActionRejectedException(400, "that's your own cell");
+            }
+            List<GameObject> weapons = player.GetMissileWeapons();
+            bool any = false, ready = false;
+            string notReady = null;
+            foreach (GameObject w in weapons ?? new List<GameObject>())
+            {
+                if (w.TryGetPart<MissileWeapon>(out MissileWeapon mw))
+                {
+                    any = true;
+                    if (mw.ReadyToFire())
+                    {
+                        ready = true;
+                        break;
+                    }
+                    notReady = notReady ?? mw.GetNotReadyToFireMessage();
+                }
+            }
+            if (!any)
+            {
+                throw new ActionRejectedException(409, "no missile weapon equipped");
+            }
+            if (!ready)
+            {
+                throw new ActionRejectedException(409, StateBuilder.Clean(notReady ?? "you need to reload") + " (use \"reload\")");
+            }
+            // Own task, like item actions: firing can raise popups (e.g. confirming an attack on a neutral).
+            GameThread.Post(() =>
+            {
+                Combat.FireMissileWeapon(player, null, target);
+                MarkReadyIfPlayerCanAct();
+            });
         }
 
         private static void Command(string command)

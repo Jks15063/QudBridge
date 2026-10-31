@@ -5,7 +5,7 @@ A Caves of Qud mod that exposes game state and player actions over a localhost H
 ## Environment
 
 - Development happens in WSL (Linux). The game runs on Windows.
-- Networking: until 2026-10-30 WSL used **NAT** (no `.wslconfig`), so `localhost` in WSL did *not* reach Windows `localhost` and the bridge had to be hit with Windows' curl: `/mnt/c/Windows/System32/curl.exe -s http://localhost:15600/`. The user then switched to **mirrored** networking (`C:\Users\Jake\.wslconfig`: `[wsl2]` / `networkingMode=mirrored`). Check with `wslinfo --networking-mode` and `curl -s http://localhost:15600/` (game running). `tools/` scripts pick plain `curl` when it works and fall back to `curl.exe`.
+- Networking: until 2026-10-30 WSL used **NAT** (no `.wslconfig`), so `localhost` in WSL did *not* reach Windows `localhost` and the bridge had to be hit with Windows' curl: `/mnt/c/Windows/System32/curl.exe -s http://localhost:15600/`. The user then switched to **mirrored** networking (`C:\Users\Jake\.wslconfig`: `[wsl2]` / `networkingMode=mirrored`). Check with `wslinfo --networking-mode` (verified `mirrored` on 2026-10-30). **From WSL use `http://127.0.0.1:15600/`, not `localhost`**: Mono's `HttpListener` resolves the `localhost` prefix to `::1` and binds it as a separate socket; WSL's `localhost` is IPv4-only and mirrored mode refuses `::1`, so WSL's request lands on the `127.0.0.1` socket, whose only prefix is `127.0.0.1`, and gets `400 Bad Request (Invalid host)`. `tools/` scripts use `127.0.0.1` and pick plain `curl` when it works, else `curl.exe`.
 - .NET SDK 10 is installed in WSL at `~/.dotnet`. `ilspycmd` is installed as a global dotnet tool, but 11.x is a native build needing glibc 2.38 (WSL is Ubuntu 22.04, glibc 2.35) and won't run. Use 9.1 instead, installed at `~/.local/share/ilspycmd9/ilspycmd`; run it with `DOTNET_ROLL_FORWARD=Major` since it targets .NET 8.
 - Windows user: `Jake`.
 
@@ -103,9 +103,8 @@ Expose the currently open popup/menu (title, text, options) in `/state`, and an 
 ## Status and handoff (2026-10-30)
 
 All seven milestones are done and committed on `master`; the API is documented in `API.md`.
-Last commit: `5e45379` (popup grace-period change; deployed but **not yet verified in-game**: test a
-conversation choice that leads back to an identical node, which should now return in ~0.1 s, and
-"take all" from the item picker, which still uses the grace period).
+`5e45379` (popup grace-period change) verified in-game 2026-10-30: a conversation choice leading
+back to an identical node returns in ~0.02 s. Settle now also waits out auto-actions (see Gotchas).
 
 ### Dev loop
 
@@ -157,22 +156,28 @@ background pins a CPU core). The test save is a level-1 character "Mamower" in J
   in `grep --include='*.cs'`.
 - Mods are C# 9 (Roslyn 3.11); everything in `Managed/` is referenced.
 - Quickness > 100 means the player sometimes acts twice per game turn, so `turns: 0` is normal.
-- "Take all" from a cell runs as an auto-action started on another thread; its `log` can be empty
-  in the response (the lines show up in the next `/state`).
+- `PlayerTurn` (and the begin-player-turn callback) runs for every step of an auto-action ("take all",
+  auto-explore, walking), so the begin-turn hook ignores turns while `AutoAct.IsActive()`; otherwise
+  Settle returns after the first step with a half-done state.
 
 ### What still needs work (priority order)
 
-1. Verify the `5e45379` change (above). Verify mirrored networking from WSL.
+1. ~~Verify `5e45379` and mirrored networking~~: done 2026-10-30 (use `127.0.0.1` from WSL, see Environment).
 2. Death / game over: the end screen isn't readable, so the harness can't tell the game ended.
-3. Combat against hostiles is untested (move-to-attack, interruptions, "really attack?" prompt).
+3. Combat: verified 2026-10-30, ranged (dragonflies, croc; bleeding, swoop attacks) and melee (`attack`
+   on a glowfish, counterattacks in the same response). Walking into a neutral swaps places; neither
+   `attack` nor `fire` on a neutral asked "really attack?". Still untested: move-to-attack a hostile,
+   interruptions of auto-actions by hostiles.
 4. Untested paths: `choose {"dir":...}` on a direction prompt directly, `getfrom` on a container
    (Joppa chests are villagers' property, so taking is stealing), trade `offer`, storing into a container.
-5. Ranged combat: `fire`/`throw` need the target picker (`PickTarget` in PickField/PickCells modes;
-   only PickDirection is handled). The test character has two revolvers.
+5. Ranged combat: `fire {x,y}` and `reload` done (verified 2026-10-30; target passed straight to
+   `Combat.FireMissileWeapon`, no picker). Still missing: `throw`, and abilities that open `PickTarget`.
 6. Activated abilities/mutations: send `Command:<ability command>` like the ability bar
    (`Qud.UI/AbilityBarButton.cs:91`); list abilities and cooldowns in `/state`.
 7. Travel helpers: auto-explore (`CmdAutoExplore`), move-to point, `CmdWaitUntilHealed`.
-8. Level-up / skill and attribute spending (status screens are unreadable).
+8. Level-up: the "You have gained a level!" popup is readable and dismissable (verified 2026-10-30, level 2).
+   Missing: unspent skill/mutation/attribute points in `/state`, and a way to spend them (status
+   screens are unreadable).
 9. Other unreadable screens: books, terminals, tinkering, gamepad `AskNumberScreen`.
 10. Look/examine descriptions of creatures and items.
 11. `/state` size (~5 KB, mostly the 80x25 map): an option for a window around the player.

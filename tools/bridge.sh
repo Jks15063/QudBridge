@@ -5,8 +5,8 @@
 #   tools/bridge.sh raw <path>         GET any path, raw
 # Uses plain curl if WSL can reach the game's localhost (mirrored networking), else Windows' curl.exe.
 set -euo pipefail
-BASE="http://localhost:15600"
-if curl -s -m 1 -o /dev/null "$BASE/" 2>/dev/null; then CURL=curl; else CURL=/mnt/c/Windows/System32/curl.exe; fi
+BASE="http://127.0.0.1:15600"
+if curl -sf -m 1 -o /dev/null "$BASE/" 2>/dev/null; then CURL=curl; else CURL=/mnt/c/Windows/System32/curl.exe; fi
 
 case "${1:-}" in
   state)

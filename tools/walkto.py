@@ -9,10 +9,10 @@ allowed only as the final cell. A test helper, not a real pathfinder (no doors o
 import json, subprocess, sys
 from collections import deque
 
-BASE = "http://localhost:15600"
+BASE = "http://127.0.0.1:15600"
 def pick_curl():
     try:
-        subprocess.run(["curl", "-s", "-m", "1", BASE + "/"], check=True, capture_output=True)
+        subprocess.run(["curl", "-sf", "-m", "1", BASE + "/"], check=True, capture_output=True)
         return "curl"
     except Exception:
         return "/mnt/c/Windows/System32/curl.exe"

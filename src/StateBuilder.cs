@@ -496,6 +496,8 @@ namespace QudBridge
                     attitude = Attitude(c, player),
                     // Strings.WoundLevel (XRL.Rules/Strings.cs:83): exact HP only with scanning, else "Wounded" etc.
                     health = NullIfEmpty(Clean(Strings.WoundLevel(c))),
+                    // Flyers can't be hit in melee by a non-flyer (Cell.GetCombatTarget skips them); shoot them.
+                    flying = c.IsFlying ? true : (bool?)null,
                 });
             }
             return list;

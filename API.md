@@ -2,7 +2,7 @@
 
 Base URL: `http://localhost:15600` (loopback only; also reachable as `http://127.0.0.1:15600`).
 
-From WSL: with mirrored networking plain `curl` works; with NAT networking use Windows' curl, `/mnt/c/Windows/System32/curl.exe`. `tools/bridge.sh` picks whichever works.
+From WSL: with mirrored networking plain `curl http://127.0.0.1:15600/` works, but `localhost` returns `400 Bad Request (Invalid host)` (Mono binds the `localhost` prefix to `::1` only, which WSL can't reach). With NAT networking use Windows' curl, `/mnt/c/Windows/System32/curl.exe`. `tools/bridge.sh` picks whichever works. Clients on Windows itself can use either name.
 
 POST requests must send a `Content-Length` (use `-d ''` for an empty body); Mono's `HttpListener`
 rejects bodyless POSTs with `411 Length Required` before the mod sees them.
@@ -89,6 +89,7 @@ $ curl -s 'http://localhost:15600/state?messages=3'
 - `creatures`: visible creatures, nearest first (max 52). `key` is the letter used on the map.
   `attitude` is `hostile`, `friendly` (allied or your follower) or `neutral`. `health` is what the
   game tells the player: a wound level like `"Wounded"`, or exact `"hp / max"` only with scanning.
+  `flying: true` (omitted otherwise) means you can't hit it in melee unless you fly too; use `fire`.
 - `items`: visible items on the ground, nearest first (max 40).
 - `features`: visible furniture, containers and solid objects (max 40).
 - `inventory`: carried items; `i` is the index in this list. `equipped`: one entry per equipped
@@ -143,7 +144,9 @@ Body: a JSON object with a `type` and type-specific fields.
 | `type` | Fields | Game command |
 |---|---|---|
 | `move` | `dir` | `CmdMove<dir>` (moving into a hostile attacks it, as in-game) |
-| `attack` | `dir` | `CmdAttack<dir>` |
+| `attack` | `dir` | `CmdAttack<dir>`. `409` if there's nothing there you can hit (`"nothing to attack there"`, or a flying creature: `"can't reach ... it is flying"`); the game itself would do nothing silently |
+| `fire` | `x`, `y` | fires your equipped missile weapons at that cell (`Combat.FireMissileWeapon` with the target, so the game's targeting screen never opens). Every ready weapon fires. `409` with no missile weapon or `"you need to reload"`. Misses often log nothing; the target's `health` in `state` shows the effect |
+| `reload` | — | `CmdReload`: reloads missile weapons from inventory ammo |
 | `wait` | — | `CmdWait` (one turn) |
 | `pickup` | — | `CmdGet` (pick up what's on your cell) |
 | `stairs` | `dir`: `up` / `down` | `CmdMoveU` / `CmdMoveD`. `down` requires stairs down on your cell (or the world map); `up` off stairs on the surface goes to the world map, as `<` does in-game. |
@@ -247,8 +250,8 @@ The item list shown when picking up from a cell with several items, or opening a
 
 `{"option": i}` selects an item, which opens its action menu as a `popup` (choose `get`); the
 list then reopens with what's left. `{"button": "take all"}` takes everything: from a cell the game
-does this as an auto-action over the next moment, so the response's `log` can come back before the
-"You take ..." lines (they show up in the next `/state`).
+does this as an auto-action (one item per step); the response waits for the whole auto-action, so
+its `log` and `state` include every "You take ..." line.
 
 ### `kind: "trade"`
 
