@@ -149,6 +149,8 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
 - `Advancement.cs`: `GET /character` and the `learn` / `raise` / `mutate` actions. Status screens are
   unreadable, so it repeats their checks (`SelectNode`, `BuyStat`, `ShowMutationPopup`) without popups;
   `mutate` calls `MutationsAPI.BuyRandomMutation`, whose choice popup comes back as a prompt.
+- `Abilities.cs`: ability list (as `Qud.UI/AbilityBar.cs` builds it; don't filter on `Visible`, it's off
+  by default) and the `ability` action (`Command:<ability command>`, like the ability bar).
 - `MessageLog.cs`: numbered copy of message-log lines from `XRLCore.RegisterNewMessageLogEntryCallback`,
   so a request can report the lines it caused even while the core thread is blocked.
 
@@ -182,8 +184,9 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
    (Joppa chests are villagers' property, so taking is stealing), trade `offer`, storing into a container.
 5. Ranged combat: `fire {x,y}` and `reload` done (verified 2026-10-30; target passed straight to
    `Combat.FireMissileWeapon`, no picker). Still missing: `throw`, and abilities that open `PickTarget`.
-6. Activated abilities/mutations: send `Command:<ability command>` like the ability bar
-   (`Qud.UI/AbilityBarButton.cs:91`); list abilities and cooldowns in `/state`.
+6. Abilities: `abilities` in `/state` and the `ability` action (src/Abilities.cs) done, verified 2026-10-30
+   (stance switch, Shield Slam with/without `dir`, cooldown error). Still missing: answering cell-target
+   pickers (`target` prompt, cancel only; PickTarget's PointerOver/LeftClick mouse events look usable).
 7. Travel helpers: auto-explore (`CmdAutoExplore`), move-to point, `CmdWaitUntilHealed`.
 8. Level-up: popup readable; `points` in `/state`, `GET /character`, `learn` / `raise` / `mutate`
    (src/Advancement.cs; copies the status screens' checks). Verified 2026-10-30: learn power, raise

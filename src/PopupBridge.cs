@@ -45,6 +45,13 @@ namespace QudBridge
                 && PickTargetWindow.currentMode == PickTargetWindow.TargetMode.PickDirection;
         }
 
+        // Any other PickTarget mode: a cell picker (XRL.UI/PickTarget.cs ShowPicker / PickCells).
+        public static bool IsTargetPrompt()
+        {
+            return GameManager.Instance?.CurrentGameView == "PickTarget"
+                && PickTargetWindow.currentMode != PickTargetWindow.TargetMode.PickDirection;
+        }
+
         // Answer it the way the on-screen control panel does off-stage: push the keypad key
         // (GameManager.cs:1305-1340). PickDirection maps NumPad keys to directions and 5 to self (PickDirection.cs:56-110).
         public static void AnswerDirection(string dir)
@@ -150,6 +157,12 @@ namespace QudBridge
             {
                 return new { kind = "direction", text = Text(PickTargetWindow.currentText) };
             }
+            if (IsTargetPrompt())
+            {
+                // Cell pickers (abilities like Charge, throwing): reported so the client sees what's asked; picking
+                // a cell isn't supported yet, only cancelling.
+                return new { kind = "target", text = Text(PickTargetWindow.currentText), mode = PickTargetWindow.currentMode.ToString(), buttons = new[] { "cancel" } };
+            }
             // A popup can sit on top of the picker (e.g. during "take all"), so it wins.
             PopupMessage p = Top();
             if (p != null)
@@ -209,6 +222,15 @@ namespace QudBridge
                 string dir = (string)body["dir"];
                 AnswerDirection(dir);
                 return "direction " + dir;
+            }
+            if (IsTargetPrompt())
+            {
+                if ((string)body["button"] != "cancel" && !string.Equals((string)body["dir"], "cancel", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new ActionRejectedException(409, "picking a target cell isn't supported yet; cancel with {\"button\":\"cancel\"}");
+                }
+                ConsoleLib.Console.Keyboard.PushKey(new ConsoleLib.Console.Keyboard.XRLKeyEvent(UnityEngine.KeyCode.Escape));
+                return "cancel target";
             }
             PopupMessage p = Top();
             if (p == null)

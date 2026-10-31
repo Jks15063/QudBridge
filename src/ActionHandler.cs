@@ -246,6 +246,9 @@ namespace QudBridge
                 case "fire":
                     Fire(body);
                     return null;
+                case "ability":
+                    // Like the ability bar; a "which direction?" prompt is answered with "dir" if given.
+                    return Abilities.Use(body);
                 case "learn":
                     // Instant, no popups (Advancement.cs); mark the action done right away.
                     Advancement.Learn(body);
@@ -303,7 +306,7 @@ namespace QudBridge
                     return null;
                 default:
                     throw new ActionRejectedException(400, "unknown action type \"" + type + "\"",
-                        new { types = new[] { "move", "attack", "fire", "reload", "learn", "raise", "mutate", "wait", "pickup", "getfrom", "stairs", "eat", "drink", "equip", "unequip", "item", "talk", "choose" } });
+                        new { types = new[] { "move", "attack", "fire", "reload", "ability", "learn", "raise", "mutate", "wait", "pickup", "getfrom", "stairs", "eat", "drink", "equip", "unequip", "item", "talk", "choose" } });
             }
         }
 

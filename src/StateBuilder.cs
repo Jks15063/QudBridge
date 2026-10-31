@@ -117,6 +117,7 @@ namespace QudBridge
                 },
                 // Unspent skill / attribute / mutation points (spend with learn / raise / mutate; see GET /character).
                 points = new { sp = player.Stat("SP"), ap = player.Stat("AP"), mp = player.Stat("MP") },
+                abilities = Abilities.Describe(player),
                 // Stomach.FoodStatus/WaterStatus (XRL.World.Parts/Stomach.cs:87/104).
                 food = Clean(stomach?.FoodStatus()),
                 water = Clean(stomach?.WaterStatus()),

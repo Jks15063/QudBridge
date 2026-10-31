@@ -84,6 +84,9 @@ $ curl -s 'http://localhost:15600/state?messages=3'
   values are menus/popups (e.g. `PopupMessage`, `ModernTrade`, `Looker`).
 - `player.hp`/`maxHp`: exact. `stats`: attributes plus `av`/`dv`, `qn` (quickness), `ms` (move speed).
   `points`: unspent `sp` (skill), `ap` (attribute), `mp` (mutation) points; see [`GET /character`](#get-character).
+  `abilities`: what the ability bar shows, e.g. `{"name":"Shield Slam","cooldown":38,"attack":true}`,
+  `{"name":"Night Vision","on":true}`. `cooldown` (rounds) only while cooling down; `on` only for
+  toggles; `why` when unusable for another reason. Use with the `ability` action.
   `effects`: active effect descriptions, with remaining turns in parentheses when finite.
 - Coordinates are zone cells, `x` 0–79 left→right, `y` 0–24 top→bottom. `dist` is in moves
   (diagonals count as 1).
@@ -188,6 +191,7 @@ Body: a JSON object with a `type` and type-specific fields.
 | `attack` | `dir` | `CmdAttack<dir>`. `409` if there's nothing there you can hit (`"nothing to attack there"`, or a flying creature: `"can't reach ... it is flying"`); the game itself would do nothing silently |
 | `fire` | `x`, `y` | fires your equipped missile weapons at that cell (`Combat.FireMissileWeapon` with the target, so the game's targeting screen never opens). Every ready weapon fires. `409` with no missile weapon or `"you need to reload"`. Misses often log nothing; the target's `health` in `state` shows the effect |
 | `reload` | — | `CmdReload`: reloads missile weapons from inventory ammo |
+| `ability` | `name`, optional `dir` | uses an ability by its `name` from `state.player.abilities` (or its command), as the ability bar does. If it asks "which direction?" it's answered with `dir`; without `dir` that comes back as a `direction` prompt. `409` with the game's message while cooling down ("You must wait 38 rounds before using Shield Slam."). Abilities that pick a cell return a `target` prompt that can only be cancelled for now |
 | `learn` | `name` | buys a skill or power (name or class from `GET /character`) for its SP cost. Instant, no time passes |
 | `raise` | `attribute` or `mutation` | spends 1 AP on an attribute (`"Strength"` or `"str"`), or 1 MP on a mutation's rank |
 | `mutate` | — | spends 4 MP on a new mutation: returns the game's "Choose a mutation" `prompt`; answer with `choose {"option": i}` |
@@ -276,6 +280,11 @@ $ curl -s -X POST http://localhost:15600/action -d '{"type":"talk","dir":"E"}'
 $ curl -s -X POST http://localhost:15600/action -d '{"type":"choose","option":5}'
 {"result":"ok","turns":0,"log":[],"state":{...}}
 ```
+
+### `kind: "target"`
+
+A cell picker (abilities like Charge, throwing). Picking a cell isn't supported yet; cancel with
+`{"button":"cancel"}`. `fire` takes its target directly and never shows this.
 
 ### `kind: "direction"`
 
