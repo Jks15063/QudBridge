@@ -66,6 +66,39 @@ namespace QudBridge
             return item.Result;
         }
 
+        // Fire-and-forget: queue work for the game thread without waiting for it.
+        public static void Post(Action work)
+        {
+            var queue = GameManager.Instance?.gameQueue;
+            if (queue == null || XRLCore.CoreThread == null)
+            {
+                throw new GameThreadUnavailableException("game thread not started");
+            }
+            queue.queueTask(() =>
+            {
+                try
+                {
+                    work();
+                }
+                finally
+                {
+                    ResetWake();
+                }
+            });
+            Keyboard.KeyEvent.Set();
+        }
+
+        // Undo our KeyEvent.Set() so IdleWait blocks again instead of spinning, unless more of our work is
+        // queued (it would otherwise wait for a keypress). Keyboard.ResetIfQueuesEmpty (Keyboard.cs:334) is the
+        // game's own reset and is a no-op if real keys or mouse events are queued.
+        private static void ResetWake()
+        {
+            if (!(GameManager.Instance?.gameQueue?.HasTask() ?? false))
+            {
+                Keyboard.ResetIfQueuesEmpty();
+            }
+        }
+
         private class WorkItem<T>
         {
             private const int Pending = 0, Running = 1, Cancelled = 2;
@@ -107,9 +140,7 @@ namespace QudBridge
                 }
                 finally
                 {
-                    // Undo our KeyEvent.Set() so IdleWait blocks again instead of spinning. This is the
-                    // game's own reset (Keyboard.cs:334); it is a no-op if real keys are queued.
-                    Keyboard.ResetIfQueuesEmpty();
+                    ResetWake();
                 }
             }
         }

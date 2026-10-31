@@ -117,6 +117,62 @@ $ curl -s 'http://localhost:15600/state?messages=3'
 
 Returns `409 {"error":"no game in progress (screen: MainMenu)"}` when no game is loaded.
 
+## `POST /action`
+
+Performs one player action, waits until it is the player's turn again (other creatures have acted),
+and returns what happened plus the new state. Only one action runs at a time.
+
+Body: a JSON object with a `type` and type-specific fields.
+
+| `type` | Fields | Game command |
+|---|---|---|
+| `move` | `dir` | `CmdMove<dir>` (moving into a hostile attacks it, as in-game) |
+| `attack` | `dir` | `CmdAttack<dir>` |
+| `wait` | — | `CmdWait` (one turn) |
+| `pickup` | — | `CmdGet` (pick up what's on your cell) |
+| `stairs` | `dir`: `up` / `down` | `CmdMoveU` / `CmdMoveD`. `down` requires stairs down on your cell (or the world map); `up` off stairs on the surface goes to the world map, as `<` does in-game. |
+| `eat` / `drink` / `equip` / `unequip` | `item` or `slot` | the item's inventory action (`equip` = "equip (auto)", `unequip` = "remove") |
+| `item` | `item` or `slot`, `verb` | any inventory action of that item, by name or menu text (`"drop"`, `"apply"`, `"read"`, ...) |
+
+`dir` is one of `N S E W NE NW SE SW`. `item` is an index from `state.inventory[].i`; `slot` is a
+label from `state.equipped[].slot` (e.g. `"Right Hand"`).
+
+```
+$ curl -s -X POST http://localhost:15600/action -d '{"type":"move","dir":"N"}'
+{"result":"ok","turns":1,"log":["You pass by a door."],"state":{ ...same as GET /state... }}
+```
+
+- `turns`: game turns that passed. Can be `0` even for a real action: with quickness above 100 the
+  player sometimes acts twice in one game turn. Actions that take no time (unequip, bumping a wall,
+  attacking an empty cell) also give `0`.
+- `log`: message-log lines added during the action, including failure messages ("You can't...").
+- `state`: `GET /state` with the default 15 messages.
+
+If the action opens a popup or menu, the game waits for input that this API can't give yet. The
+action itself has usually happened; the popup is often just its result message. Seen in testing:
+`eat` and `drink` (result message), `drop` of a stack ("how many?", `DynamicPopupMessage`), and
+`stairs` `down` from the world map. Until popups are supported, close them in-game.
+
+```
+{"result":"blocked","screen":"PopupMessage","error":"the game is waiting on a popup or menu (PopupMessage); popups are not supported yet"}
+```
+
+`"result":"timeout"` means the action didn't finish within 15 s. Neither case includes `state`.
+
+Unknown verbs list what's available:
+
+```
+$ curl -s -X POST http://localhost:15600/action -d '{"type":"item","item":4,"verb":"juggle"}'
+{"error":"no \"juggle\" action for beetle jerky [3 servings]","available":["drop","equip (auto)","equip (manual)","add notes","mark important","look","eat","show effects"]}
+```
+
+Rejections (nothing happens in-game):
+
+| Status | When |
+|---|---|
+| 400 | Bad JSON, unknown `type`/`dir`/`verb`, bad `item`/`slot` |
+| 409 | No game, not in normal play (`screen` isn't `Stage`), not the player's turn, another action in progress, or the action isn't possible ("no stairs down here", "cannot eat ... right now") |
+
 ## Errors
 
 | Status | When | Body |

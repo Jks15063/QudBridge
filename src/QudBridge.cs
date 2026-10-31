@@ -21,6 +21,7 @@ namespace QudBridge
         public static void OnModsLoaded()
         {
             MetricsManager.LogInfo("QudBridge " + Version + " loaded");
+            ActionHandler.RegisterHooks();
             BridgeServer.Start();
         }
 

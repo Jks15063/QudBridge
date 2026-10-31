@@ -4,6 +4,7 @@ using System.Net;
 using System.Text;
 using System.Threading;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace QudBridge
 {
@@ -175,7 +176,49 @@ namespace QudBridge
                     WriteJson(context, 200, GameThread.Invoke(() => StateBuilder.Build(messages, legend)));
                     return;
                 }
+                if (path == "/action")
+                {
+                    if (request.HttpMethod != "POST")
+                    {
+                        WriteJson(context, 405, new { error = "method not allowed" });
+                        return;
+                    }
+                    JObject body;
+                    try
+                    {
+                        string text;
+                        using (var reader = new StreamReader(request.InputStream, request.ContentEncoding ?? Encoding.UTF8))
+                        {
+                            text = reader.ReadToEnd();
+                        }
+                        body = JObject.Parse(text);
+                    }
+                    catch (JsonException ex)
+                    {
+                        WriteJson(context, 400, new { error = "body must be a JSON object: " + ex.Message });
+                        return;
+                    }
+                    if (!(XRL.The.Game?.Running ?? false))
+                    {
+                        throw new NoGameException("no game in progress (screen: " + (GameManager.Instance?.CurrentGameView ?? "unknown") + ")");
+                    }
+                    // Also off-thread: modern popups don't pump gameQueue (XRL.UI/Popup.cs:899), so this would
+                    // otherwise wait out the 5s dispatch timeout. RequirePlayerTurn repeats it on the game thread.
+                    string view = GameManager.Instance?.CurrentGameView;
+                    if (view != XRL.UI.Options.StageViewID)
+                    {
+                        throw new ActionRejectedException(409, "not in normal play (screen: " + view + ")");
+                    }
+                    WriteJson(context, 200, ActionHandler.Handle(body, StateBuilder.DefaultMessages));
+                    return;
+                }
                 WriteJson(context, 404, new { error = "not found", path = request.Url.AbsolutePath });
+            }
+            catch (ActionRejectedException ex)
+            {
+                var error = ex.Extra != null ? JObject.FromObject(ex.Extra) : new JObject();
+                error.AddFirst(new JProperty("error", ex.Message));
+                WriteJson(context, ex.Status, error);
             }
             catch (NoGameException ex)
             {
