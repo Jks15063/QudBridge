@@ -1,0 +1,7 @@
+{
+  "ID": "QudBridge",
+  "Title": "QudBridge",
+  "Description": "Exposes game state and player actions over a localhost HTTP API.",
+  "Version": "0.1.0",
+  "Author": "jks15063"
+}

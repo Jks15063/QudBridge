@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Editor/type-check only. The game compiles src/*.cs itself at startup (RoslynCSharp,
+    Roslyn 3.11 => C# 9 max) and ignores this file. `dotnet build` must pass.
+  -->
+  <PropertyGroup>
+    <GameDir>/mnt/c/Program Files (x86)/Steam/steamapps/common/Caves of Qud</GameDir>
+    <ManagedDir>$(GameDir)/CoQ_Data/Managed</ManagedDir>
+
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <OutputType>Library</OutputType>
+    <AssemblyName>QudBridge</AssemblyName>
+    <RootNamespace>QudBridge</RootNamespace>
+
+    <!-- Compile against the game's own Mono BCL, not a .NET Framework targeting pack. -->
+    <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
+    <NoStdLib>true</NoStdLib>
+    <NoConfig>true</NoConfig>
+    <FrameworkPathOverride>$(ManagedDir)</FrameworkPathOverride>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="src/**/*.cs" />
+  </ItemGroup>
+
+  <!-- Mods are compiled against every loaded game assembly (ModManager.GetCompilerService), so mirror that. -->
+  <ItemGroup>
+    <Reference Include="$(ManagedDir)/*.dll" Exclude="$(ManagedDir)/*UIElements*.dll;$(ManagedDir)/ExCSS*.dll" Private="false" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,43 @@
+using XRL;
+using XRL.Messages;
+using XRL.World;
+
+namespace QudBridge
+{
+    // Hook points (from ~/qud-src):
+    //  - [ModSensitiveCacheInit]: run by ModManager.ResetModSensitiveStaticCaches (XRL/ModManager.cs:340),
+    //    called once after mods are built (XRL/ModManager.cs:653) and again on config hotload (XRL.Core/XRLCore.cs:577).
+    //  - [CallAfterGameLoaded]: run by ModManager.CallAfterGameLoaded (XRL/ModManager.cs:374),
+    //    called from XRLGame.LoadGame (XRL/XRLGame.cs:1954). Saved-game loads only, not new games.
+    [HasModSensitiveStaticCache]
+    [HasCallAfterGameLoaded]
+    public static class QudBridgeMod
+    {
+        public const string Version = "0.1.0";
+
+        [ModSensitiveCacheInit]
+        public static void OnModsLoaded()
+        {
+            MetricsManager.LogInfo("QudBridge " + Version + " loaded");
+        }
+
+        [CallAfterGameLoaded]
+        public static void OnGameLoaded()
+        {
+            MetricsManager.LogInfo("QudBridge: save loaded");
+            MessageQueue.AddPlayerMessage("QudBridge " + Version + " active.", 'G');
+        }
+    }
+
+    // New-game path: QudGameBootModule instantiates every [PlayerMutator] type and calls mutate()
+    // on the freshly built player (XRL.CharacterBuilds.Qud/QudGameBootModule.cs:303).
+    [PlayerMutator]
+    public class QudBridgePlayerMutator : IPlayerMutator
+    {
+        public void mutate(GameObject player)
+        {
+            MetricsManager.LogInfo("QudBridge: new game started");
+            MessageQueue.AddPlayerMessage("QudBridge " + QudBridgeMod.Version + " active.", 'G');
+        }
+    }
+}
