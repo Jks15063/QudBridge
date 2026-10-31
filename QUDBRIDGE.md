@@ -203,7 +203,8 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
    Container flow verified on Tam's chest in Joppa: `getfrom NE` -> pick (the chest) -> its menu -> `open` ->
    "That is not owned by you..." `Yes` -> pick "Opening a chest" (item -> menu -> `get`, list reopens) -> `store`
    -> trade `mode: container` (store a torch and take an item in one `offer`; no "Trade complete!" popup, the
-   screen refreshes). Taking from an owned chest turned Tam hostile (Theft broadcast), as the game intends.
+   screen refreshes). Taking from an owned chest turned Tam hostile (Theft broadcast), as the game intends; Tam ("Impossible")
+   then killed Iusar Ganuginus. Need a new test character.
 5. Ranged combat: `fire {x,y}` and `reload` done (verified 2026-10-30; target passed straight to
    `Combat.FireMissileWeapon`, no picker). `throw {x,y}` done 2026-10-30 (`Combat.ThrowWeapon` with
    the target; verified with torches, 1 turn each).
@@ -234,8 +235,8 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
 12. Out-of-view objects aren't listed (remembered cells show terrain only).
 13. Done 2026-10-30: inventory/equipped entries carry `id` (`GameObject.BaseID`, the game's own object number;
    reading it only assigns one from the game's sequence if missing, as the game itself does) and `item` takes
-   that id, for carried or equipped items. Partly used stacks get a new id (SplitStack keeps the old object for
-   the used part). Verified: unequip/equip by id (same id throughout), `slot` still works, bad id `400`,
+   that id, for carried or equipped items. Partly used stacks: which part keeps the id depends on the action
+   (drop: the rest gets a new id; apply a salve injector: the rest keeps it). Verified: unequip/equip by id (same id throughout), `slot` still works, bad id `400`,
    dropping 1 of 2 torches (the rest got a new id), picking it back up (merged into the stack, stack kept its id).
 14. Done 2026-10-30: the "QudBridge active" in-game message is gone (Player.log lines only; the version is
    on `GET /`). Verified after a restart.

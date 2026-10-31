@@ -102,9 +102,12 @@ $ curl -s 'http://localhost:15600/state?messages=3'
 - `inventory`: carried items. `equipped`: one entry per equipped item, labelled by its (first) body
   slot. `id` is the game's own number for the object (`GameObject.BaseID`): it stays with the item when
   the inventory changes, across equipping and unequipping, and across saves. The exception is stacks: using or
-  dropping part of a stack splits it (`Stacker.SplitStack`), and the game keeps the old object for the
-  part that was used, so what's left of the stack has a new id. An item that joins a stack you already
+  dropping part of a stack splits it, and which part keeps the old id depends on the action (dropping
+  1 of 2 torches gave the remaining torch a new id; applying 1 of 2 salve injectors left the remaining
+  one with the old id). After a partial use, read the ids again. An item that joins a stack you already
   carry disappears into it, and the stack keeps its id.
+- Names are what the player sees: while confused (e.g. after eating witchwood bark) the game scrambles
+  creature and item names, and so does the API; match creatures by position or `attitude` then.
 - Item names spell out stat glyphs: `PV` penetration, `DMG` damage, `AV` armor, `DV` dodge.
 - `messages`: oldest first, colour codes removed; a line may contain `\n`.
 
