@@ -13,12 +13,15 @@ namespace QudBridge
     [HasCallAfterGameLoaded]
     public static class QudBridgeMod
     {
-        public const string Version = "0.1.0";
+        // From manifest.json via ModManager.GetMod(Assembly) (XRL/ModManager.cs:836).
+        public static readonly string Version =
+            ModManager.GetMod(typeof(QudBridgeMod).Assembly)?.Manifest?.Version.ToString() ?? "unknown";
 
         [ModSensitiveCacheInit]
         public static void OnModsLoaded()
         {
             MetricsManager.LogInfo("QudBridge " + Version + " loaded");
+            BridgeServer.Start();
         }
 
         [CallAfterGameLoaded]

@@ -5,7 +5,7 @@ A Caves of Qud mod that exposes game state and player actions over a localhost H
 ## Environment
 
 - Development happens in WSL (Linux). The game runs on Windows.
-- WSL uses mirrored networking: `localhost` in WSL reaches Windows `localhost`. Verify the bridge from WSL with `curl -v http://localhost:<port>/`.
+- WSL uses **NAT** networking (no `.wslconfig`), so `localhost` in WSL does *not* reach Windows `localhost`. Hit the bridge from WSL with Windows' curl: `/mnt/c/Windows/System32/curl.exe -s http://localhost:<port>/`. The harness will need to run on Windows, use `curl.exe`, or WSL must be switched to `networkingMode=mirrored`.
 - .NET SDK 10 is installed in WSL at `~/.dotnet`. `ilspycmd` is installed as a global dotnet tool, but 11.x is a native build needing glibc 2.38 (WSL is Ubuntu 22.04, glibc 2.35) and won't run. Use 9.1 instead, installed at `~/.local/share/ilspycmd9/ilspycmd`; run it with `DOTNET_ROLL_FORWARD=Major` since it targets .NET 8.
 - Windows user: `Jake`.
 
