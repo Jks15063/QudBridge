@@ -117,7 +117,7 @@ back to an identical node returns in ~0.02 s. Settle now also waits out auto-act
 Required game settings (otherwise requests time out while the game window is in the background):
 **Options → App Settings → Keep Caves of Qud active in background** (needs "Show advanced
 options") and **Display → Frame rate** set to a number (e.g. 60), not VSync (VSync in the
-background pins a CPU core). The test save is a level-1 character "Mamower" in Joppa.
+background pins a CPU core). The test character "Mamower" died on 2026-10-30 (Classic mode deletes the save); make a new one for testing.
 
 ### Architecture (src/)
 
@@ -158,6 +158,9 @@ background pins a CPU core). The test save is a level-1 character "Mamower" in J
 - zsh here has `noclobber` (use `>|`), `rm` is aliased to `rm -i` (use `command rm -f`), quote globs
   in `grep --include='*.cs'`.
 - Mods are C# 9 (Roslyn 3.11); everything in `Managed/` is referenced.
+- The low-HP warning popup ("Your health has dropped below 40%!") is shown at the top of PlayerTurn's
+  loop, *after* the begin-turn callbacks (XRLCore.cs:693 vs 767), so the begin-turn hook skips turns
+  while `XRLCore.HPWarning` is set (fix deployed 2026-10-30, untested; before it, the next request got a 504).
 - Quickness > 100 means the player sometimes acts twice per game turn, so `turns: 0` is normal.
 - `PlayerTurn` (and the begin-player-turn callback) runs for every step of an auto-action ("take all",
   auto-explore, walking), so the begin-turn hook ignores turns while `AutoAct.IsActive()`; otherwise
@@ -166,7 +169,9 @@ background pins a CPU core). The test save is a level-1 character "Mamower" in J
 ### What still needs work (priority order)
 
 1. ~~Verify `5e45379` and mirrored networking~~: done 2026-10-30 (use `127.0.0.1` from WSL, see Environment).
-2. Death / game over: the end screen isn't readable, so the harness can't tell the game ended.
+2. ~~Death / game over~~: done 2026-10-30 (src/GameOver.cs; death popup -> `gameover` prompt -> `ended`,
+   then `lastGame` in no-game errors). Verified in-game except the glyph cleanup and slimmer `lastGame`.
+   Starting a new character from the main menu isn't possible through the API.
 3. Combat: verified 2026-10-30, ranged (dragonflies, croc; bleeding, swoop attacks) and melee (`attack`
    on a glowfish, counterattacks in the same response). Walking into a neutral swaps places; neither
    `attack` nor `fire` on a neutral asked "really attack?". Still untested: move-to-attack a hostile,

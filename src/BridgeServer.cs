@@ -171,7 +171,17 @@ namespace QudBridge
                     // StateBuilder repeats the check on the game thread.
                     if (!(XRL.The.Game?.Running ?? false))
                     {
-                        throw new NoGameException("no game in progress (screen: " + (GameManager.Instance?.CurrentGameView ?? "unknown") + ")");
+                        // After death the end screen is up with the game no longer running (GameOver.cs).
+                        if (GameManager.Instance?.CurrentGameView == GameOver.SummaryView)
+                        {
+                            object summary = ActionHandler.TryDescribePopup();
+                            if (summary != null)
+                            {
+                                WriteJson(context, 200, new { screen = GameOver.SummaryView, gameOver = true, prompt = summary });
+                                return;
+                            }
+                        }
+                        NoGame();
                     }
                     // Off normal play the game thread is usually blocked on a UI screen (Popup.cs:899), so read
                     // the popup from the UI thread instead of the game state.
@@ -200,7 +210,7 @@ namespace QudBridge
                     // Same fast "no game" check as /state; needs normal play because the game thread must be free.
                     if (!(XRL.The.Game?.Running ?? false))
                     {
-                        throw new NoGameException("no game in progress (screen: " + (GameManager.Instance?.CurrentGameView ?? "unknown") + ")");
+                        NoGame();
                     }
                     bool details = request.QueryString["details"] == "1";
                     WriteJson(context, 200, GameThread.Invoke(() => Advancement.Describe(details)));
@@ -228,9 +238,11 @@ namespace QudBridge
                         WriteJson(context, 400, new { error = "body must be a JSON object: " + ex.Message });
                         return;
                     }
-                    if (!(XRL.The.Game?.Running ?? false))
+                    bool closingSummary = GameManager.Instance?.CurrentGameView == GameOver.SummaryView
+                        && string.Equals((string)body["type"], "choose", StringComparison.OrdinalIgnoreCase);
+                    if (!(XRL.The.Game?.Running ?? false) && !closingSummary)
                     {
-                        throw new NoGameException("no game in progress (screen: " + (GameManager.Instance?.CurrentGameView ?? "unknown") + ")");
+                        NoGame();
                     }
                     // Also off-thread: modern popups don't pump gameQueue (XRL.UI/Popup.cs:899), so this would
                     // otherwise wait out the 5s dispatch timeout. RequirePlayerTurn repeats it on the game thread.
@@ -268,6 +280,16 @@ namespace QudBridge
                 MetricsManager.LogError("QudBridge: request failed", ex);
                 try { WriteJson(context, 500, new { error = ex.Message }); } catch { }
             }
+        }
+
+        // "No game" error; once a game has ended it also says how (GameOver.Last), so a client that missed the
+        // end screen can still tell death from never having started.
+        private static void NoGame()
+        {
+            string screen = GameManager.Instance?.CurrentGameView ?? "unknown";
+            object last = GameOver.Last;
+            throw new ActionRejectedException(409, "no game in progress (screen: " + screen + ")",
+                last == null ? null : new { gameOver = true, lastGame = last });
         }
 
         // Omit nulls to keep responses compact (they're fed to an LLM).

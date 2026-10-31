@@ -312,6 +312,33 @@ they pay you).
 | `"button": "offer"` | offers the trade (may raise confirmation popups) |
 | `"button": "cancel"` | leaves the trade screen |
 
+### Death and `kind: "gameover"`
+
+When the player dies, the action that caused it returns the game's death popup as an ordinary
+`popup` prompt (`id` `"DeathMessage"`, text `"You died.\n\nYou bled to death because of ..."`).
+Dismissing it with `choose` returns the end screen:
+
+```
+{"result":"prompt","screen":"GameSummaryScreen","log":[],"prompt":{"kind":"gameover","name":"Mamower",
+ "cause":"You bled to death because of a bloody wet glowfish [swimming].",
+ "details":"Game summary for Mamower\n\nThis game ended on ...\nYou were level 2.\nYou scored 88 points.\n...",
+ "buttons":["exit"]}}
+```
+
+`GET /state` returns the same prompt with `"gameOver":true`. `details` is the game's summary (score,
+chronology, final messages; a few KB). In Classic mode the save is already deleted at this point.
+`choose` (any body, e.g. `{"button":"exit"}`) closes it, and the game goes to the main menu:
+
+```
+{"result":"ended","screen":"MainMenu","log":[],"lastGame":{"name":"Mamower","cause":"You bled to death ..."}}
+```
+
+After that, game requests fail with `409` and say how the last game ended (until the game is relaunched):
+
+```
+{"error":"no game in progress (screen: MainMenu)","gameOver":true,"lastGame":{"name":"Mamower","cause":"..."}}
+```
+
 ## Errors
 
 | Status | When | Body |

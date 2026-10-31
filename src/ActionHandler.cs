@@ -72,10 +72,12 @@ namespace QudBridge
             // PlayerTurn runs (and calls this, XRLCore.cs:693) for every step of an auto-action too ("take all",
             // auto-explore, walking), so a turn only counts as new once no auto-action is running; Settle then
             // returns after the whole auto-action instead of after its first step.
-            XRLCore.RegisterOnBeginPlayerTurnCallback(_ =>
+            // Likewise when the low-HP warning is pending: PlayerTurn shows it right after this callback
+            // (XRLCore.cs:767), so the turn isn't ready yet; Settle's UI probe reports the popup instead.
+            XRLCore.RegisterOnBeginPlayerTurnCallback(core =>
             {
                 Interlocked.Exchange(ref LastTurn, The.Game?.Turns ?? 0);
-                if (AutoAct.IsActive())
+                if (AutoAct.IsActive() || core.HPWarning)
                 {
                     Progress.Set();
                     return;
@@ -548,6 +550,11 @@ namespace QudBridge
                     else if (prompt != null)
                     {
                         return new { result = "prompt", screen, log = MessageLog.Since(started.MessageSeq), prompt };
+                    }
+                    if (screen == "MainMenu" && !(The.Game?.Running ?? false))
+                    {
+                        // The end screen was closed (or the game otherwise ended): nothing more will happen.
+                        return new { result = "ended", screen, log = MessageLog.Since(started.MessageSeq), lastGame = GameOver.Last };
                     }
                     if (unreadableSince < 0)
                     {

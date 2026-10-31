@@ -162,7 +162,11 @@ namespace QudBridge
                 return DescribeItemPicker(picker);
             }
             TradeScreen trade = TradeBridge.Screen();
-            return trade == null ? null : TradeBridge.Describe(trade);
+            if (trade != null)
+            {
+                return TradeBridge.Describe(trade);
+            }
+            return GameOver.Describe();
         }
 
         public static object Describe(PopupMessage p)
@@ -218,6 +222,10 @@ namespace QudBridge
                 if (trade != null)
                 {
                     return TradeBridge.Choose(trade, body);
+                }
+                if (GameOver.TryClose())
+                {
+                    return "exit end screen";
                 }
                 throw new ActionRejectedException(409, "no popup is open");
             }
