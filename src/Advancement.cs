@@ -49,6 +49,8 @@ namespace QudBridge
                         owned = powerOwned ? true : (bool?)null,
                         canLearn = !powerOwned && why == null ? true : (bool?)null,
                         why,
+                        // Always shown, met or not, so a client can plan (the skills screen shows these too).
+                        requires = powerOwned ? null : Requires(power),
                         desc = details ? NullIfEmpty(StateBuilder.Clean(power.Snippet)) : null,
                     });
                 }
@@ -60,6 +62,7 @@ namespace QudBridge
                     owned = owned ? true : (bool?)null,
                     canLearn = !owned && skillWhy == null ? true : (bool?)null,
                     why = skillWhy,
+                    requires = owned ? null : SkillRequires(skill),
                     desc = details ? NullIfEmpty(StateBuilder.Clean(skill.Snippet)) : null,
                     powers,
                 });
@@ -219,67 +222,173 @@ namespace QudBridge
             MutationsAPI.BuyRandomMutation(The.Player, Confirm: false);
         }
 
-        // Why the player can't buy this skill (power == null) or power now, or null if they can.
+        // Why the player can't buy this skill (power == null) or power now, or null if they can. Lists every
+        // failing reason ("costs 100 SP; you have 44; needs Strength 23 (you have 22)"), in SelectNode's order.
         private static string WhyNot(GameObject player, SkillEntry skill, PowerEntry power)
         {
             if ((power != null && power.IsSkillInitiatory) || (power == null && skill.Initiatory))
             {
                 return "must be initiated into this to learn it";
             }
+            var reasons = new List<string>();
             if (power != null && !skill.Has(player))
             {
-                return "requires the " + StateBuilder.Clean(skill.Name) + " skill (" + skill.Cost + " SP) first";
+                reasons.Add("requires the " + StateBuilder.Clean(skill.Name) + " skill (" + skill.Cost + " SP) first");
             }
             int cost = power?.Cost ?? skill.Cost;
             if (player.Stat("SP") < cost)
             {
-                return "costs " + cost + " SP; you have " + player.Stat("SP");
+                reasons.Add("costs " + cost + " SP; you have " + player.Stat("SP"));
             }
             if (power != null)
             {
-                if (!power.MeetsRequirements(player))
+                Unmet(player, power, reasons);
+                // Anything else the game checks (PowerEntry.MeetsRequirements ends with the skill class's own check).
+                if (reasons.Count == 0 && !power.MeetsRequirements(player))
                 {
-                    return "requirements not met: " + Requirements(player, power);
+                    reasons.Add("requirements not met");
                 }
             }
             else
             {
-                if (!skill.MeetsRequirements(player))
+                // A skill needs its free powers' requirements (SkillEntry.MeetsRequirements; SelectNode also checks
+                // their attribute minimums).
+                foreach (PowerEntry free in skill.PowerList)
                 {
-                    return "requirements not met";
-                }
-                foreach (PowerEntry free in skill.Powers.Values)
-                {
-                    if (free.Cost == 0 && !free.MeetsAttributeMinimum(player))
+                    if (free.Cost == 0)
                     {
-                        return "requirements not met: " + Requirements(player, free);
+                        Unmet(player, free, reasons);
+                    }
+                }
+                if (reasons.Count == 0 && !skill.MeetsRequirements(player))
+                {
+                    reasons.Add("requirements not met");
+                }
+            }
+            return reasons.Count == 0 ? null : string.Join("; ", reasons);
+        }
+
+        // Adds the unmet parts of a power's requirements (PowerEntry.MeetsRequirements: attribute minimums, where
+        // any one "|" group suffices; Exclusion; Requires).
+        private static void Unmet(GameObject player, PowerEntry power, List<string> reasons)
+        {
+            if (!power.MeetsAttributeMinimum(player))
+            {
+                reasons.Add("needs " + AttributeText(power, player));
+            }
+            foreach (string name in Names(power.Exclusion))
+            {
+                if (player.HasSkill(name) || HasMutation(player, name))
+                {
+                    reasons.Add("can't be learned with " + DisplayName(name));
+                }
+            }
+            foreach (string name in Names(power.Requires))
+            {
+                if (!player.HasSkill(name) && !HasMutation(player, name))
+                {
+                    reasons.Add("needs " + DisplayName(name));
+                }
+            }
+        }
+
+        // All of a power's requirements, met or not: "Strength 23", "Agility 19 or Strength 19; needs Swipe".
+        private static string Requires(PowerEntry power)
+        {
+            var parts = new List<string>();
+            string attrs = AttributeText(power, null);
+            if (attrs.Length > 0)
+            {
+                parts.Add(attrs);
+            }
+            foreach (string name in Names(power.Requires))
+            {
+                parts.Add("needs " + DisplayName(name));
+            }
+            foreach (string name in Names(power.Exclusion))
+            {
+                parts.Add("not with " + DisplayName(name));
+            }
+            return parts.Count == 0 ? null : string.Join("; ", parts);
+        }
+
+        private static string SkillRequires(SkillEntry skill)
+        {
+            var parts = new List<string>();
+            foreach (PowerEntry free in skill.PowerList)
+            {
+                if (free.Cost == 0)
+                {
+                    string r = Requires(free);
+                    if (r != null)
+                    {
+                        parts.Add(r);
                     }
                 }
             }
-            return null;
+            return parts.Count == 0 ? null : string.Join("; ", parts);
         }
 
-        private static string Requirements(GameObject player, PowerEntry power)
+        // "Strength 23" / "Agility 19 or Strength 19"; with player, adds what they have: "Strength 23 (you have 22)".
+        private static string AttributeText(PowerEntry power, GameObject player)
         {
-            var sb = new StringBuilder();
+            var groups = new List<string>();
             foreach (PowerEntryRequirement r in power.requirements)
             {
-                if (sb.Length > 0)
+                var terms = new List<string>();
+                for (int i = 0; i < r.Attributes.Count; i++)
                 {
-                    sb.Append(" or ");
+                    if (r.Minimums[i] <= 0)
+                    {
+                        continue; // filler in the data ("Strength 0"); always met
+                    }
+                    string t = r.Attributes[i] + " " + r.Minimums[i];
+                    if (player != null)
+                    {
+                        t += " (you have " + player.BaseStat(r.Attributes[i]) + ")";
+                    }
+                    terms.Add(t);
                 }
-                r.Render(player, sb);
+                if (terms.Count > 0)
+                {
+                    groups.Add(string.Join(", ", terms));
+                }
             }
-            if (!string.IsNullOrEmpty(power.Requires))
+            return string.Join(" or ", groups);
+        }
+
+        private static IEnumerable<string> Names(string list)
+        {
+            if (string.IsNullOrEmpty(list))
             {
-                if (sb.Length > 0)
-                {
-                    sb.Append("; ");
-                }
-                sb.Append("needs ").Append(power.Requires);
+                yield break;
             }
-            string text = StateBuilder.Clean(sb.ToString()).Trim();
-            return text.Length == 0 ? "see the skills screen" : text;
+            foreach (string name in list.Split(','))
+            {
+                string n = name.Trim();
+                if (n.Length > 0)
+                {
+                    yield return n;
+                }
+            }
+        }
+
+        private static bool HasMutation(GameObject player, string name)
+        {
+            return MutationFactory.TryGetMutationEntry(name, out MutationEntry entry) && player.HasPart(entry.Class);
+        }
+
+        private static string DisplayName(string name)
+        {
+            if (SkillFactory.Factory.TryGetFirstEntry(name, out var entry))
+            {
+                return StateBuilder.Clean(entry.Name);
+            }
+            if (MutationFactory.TryGetMutationEntry(name, out MutationEntry m))
+            {
+                return StateBuilder.Clean(m.GetDisplayName());
+            }
+            return name;
         }
 
         private static string RankWhyNot(GameObject player, BaseMutation m)

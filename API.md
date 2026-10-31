@@ -154,11 +154,15 @@ $ curl -s http://127.0.0.1:15600/character
  "skills":[{"name":"Axe","cost":50,"canLearn":true,"powers":[{"name":"Cleave","cost":...,
    "why":"requires the Axe skill (50 SP) first"}, ...]},
   {"name":"Pistol","cost":100,"owned":true,"powers":[{"name":"Steady Hand","cost":0,"owned":true},
-   {"name":"Sling and Run","cost":50,"canLearn":true}, ...]}, ...]}
+   {"name":"Sling and Run","cost":50,"canLearn":true,"requires":"Agility 15"}, ...]}, ...]}
 ```
 
-`owned` / `canLearn` / `canRaise` are present only when true. `why` says why something can't be
-learned now (not enough SP, needs its skill first, attribute requirements, initiation only).
+`owned` / `canLearn` / `canRaise` are present only when true. `requires` (on anything not owned)
+lists all requirements whether met or not, as the skills screen does: attribute minimums
+(`"Strength 23"`; `" or "` between alternatives), `needs <skill or mutation>`, `not with <...>`.
+`why` lists every reason it can't be learned now, e.g.
+`"costs 100 SP; you have 44; needs Strength 23 (you have 22)"` (also: needs its skill first,
+initiation only).
 Powers with cost `0` come free with their skill. `rank` is the mutation's effective rank, `baseRank`
 the bought one. `canMutate` is false for creatures that can't buy mutations (e.g. true kin).
 
