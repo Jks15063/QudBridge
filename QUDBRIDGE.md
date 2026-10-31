@@ -188,7 +188,8 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
 
 1. ~~Verify `5e45379` and mirrored networking~~: done 2026-10-30 (use `127.0.0.1` from WSL, see Environment).
 2. ~~Death / game over~~: done 2026-10-30 (src/GameOver.cs; death popup -> `gameover` prompt -> `ended`,
-   then `lastGame` in no-game errors). Verified in-game except the glyph cleanup and slimmer `lastGame`.
+   then `lastGame` in no-game errors). Fully verified 2026-10-31 (Siruumemir, killed by a fractus): `details` has the summary,
+   chronology and final messages with no markup or stray glyphs; `lastGame` is `{name, cause}`.
    Starting a new character from the main menu isn't possible through the API.
 3. Combat: verified 2026-10-30, ranged (dragonflies, croc; bleeding, swoop attacks) and melee (`attack`
    on a glowfish, counterattacks in the same response). Walking into a neutral swaps places; neither
