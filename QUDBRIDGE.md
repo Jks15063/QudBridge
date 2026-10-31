@@ -180,7 +180,7 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
    on a glowfish, counterattacks in the same response). Walking into a neutral swaps places; neither
    `attack` nor `fire` on a neutral asked "really attack?". Still untested: move-to-attack a hostile,
    interruptions of auto-actions by hostiles.
-4. Untested paths: `choose {"dir":...}` on a direction prompt directly, `getfrom` on a container
+4. Untested paths (`choose {"dir":...}` on a direction prompt now verified via Shield Slam): `getfrom` on a container
    (Joppa chests are villagers' property, so taking is stealing), trade `offer`, storing into a container.
 5. Ranged combat: `fire {x,y}` and `reload` done (verified 2026-10-30; target passed straight to
    `Combat.FireMissileWeapon`, no picker). Still missing: `throw`, and abilities that open `PickTarget`.
