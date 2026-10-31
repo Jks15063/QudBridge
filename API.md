@@ -372,6 +372,10 @@ The trade screen (a merchant's "Let's trade", or storing into a container: `mode
  "totals":{"buy":0.03,"sell":0.0,"youPay":1},"buttons":["offer","cancel"]}
 ```
 
+In `container` mode (the `store` button of a container's item list) `offer` moves the items both ways
+without prices or a "Trade complete!" popup; the screen refreshes with the new contents. Opening or
+taking from a container someone else owns can turn them and their allies hostile.
+
 `price` is per item in drams of water. `totals.youPay` is the drams the offer costs you (negative:
 they pay you).
 

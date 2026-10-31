@@ -200,9 +200,10 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
 4. Trade `offer` verified 2026-10-30 with Tam (bought 9 lead slugs, sold waterskins; the "pony up" confirmation,
    "Trade complete!", refreshed screen). Fixed: the offer branch is copied into TradeBridge.Offer (the game's is
    async void) so the stale trade screen isn't reported between the confirmation and "Trade complete!".
-   `getfrom` reaches the chest's menu and the ownership prompt (answered No: opening an owned container sends a
-   Trespass help broadcast, Container.cs:121, and taking is Theft). Untested: taking from / storing into an
-   unowned container.
+   Container flow verified on Tam's chest in Joppa: `getfrom NE` -> pick (the chest) -> its menu -> `open` ->
+   "That is not owned by you..." `Yes` -> pick "Opening a chest" (item -> menu -> `get`, list reopens) -> `store`
+   -> trade `mode: container` (store a torch and take an item in one `offer`; no "Trade complete!" popup, the
+   screen refreshes). Taking from an owned chest turned Tam hostile (Theft broadcast), as the game intends.
 5. Ranged combat: `fire {x,y}` and `reload` done (verified 2026-10-30; target passed straight to
    `Combat.FireMissileWeapon`, no picker). `throw {x,y}` done 2026-10-30 (`Combat.ThrowWeapon` with
    the target; verified with torches, 1 turn each).
