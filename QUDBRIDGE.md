@@ -117,7 +117,8 @@ back to an identical node returns in ~0.02 s. Settle now also waits out auto-act
 Required game settings (otherwise requests time out while the game window is in the background):
 **Options → App Settings → Keep Caves of Qud active in background** (needs "Show advanced
 options") and **Display → Frame rate** set to a number (e.g. 60), not VSync (VSync in the
-background pins a CPU core). The test character "Mamower" died on 2026-10-30 (Classic mode deletes the save); make a new one for testing.
+background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus", a level-1 true kin warrior (long sword, shield,
+  Issachar rifle) in the Joppa outskirts. The first one, Mamower, died testing game over.
 
 ### Architecture (src/)
 
@@ -160,7 +161,8 @@ background pins a CPU core). The test character "Mamower" died on 2026-10-30 (Cl
 - Mods are C# 9 (Roslyn 3.11); everything in `Managed/` is referenced.
 - The low-HP warning popup ("Your health has dropped below 40%!") is shown at the top of PlayerTurn's
   loop, *after* the begin-turn callbacks (XRLCore.cs:693 vs 767), so the begin-turn hook skips turns
-  while `XRLCore.HPWarning` is set (fix deployed 2026-10-30, untested; before it, the next request got a 504).
+  while `XRLCore.HPWarning` is set (verified 2026-10-30: the action returns the warning as a prompt; before
+  the fix it returned `ok` and the next request got a 504).
 - Quickness > 100 means the player sometimes acts twice per game turn, so `turns: 0` is normal.
 - `PlayerTurn` (and the begin-player-turn callback) runs for every step of an auto-action ("take all",
   auto-explore, walking), so the begin-turn hook ignores turns while `AutoAct.IsActive()`; otherwise

@@ -212,6 +212,12 @@ namespace QudBridge
                     {
                         NoGame();
                     }
+                    // Popups and screens block the game thread (Popup.cs:899): say so now instead of a 5 s 504.
+                    string charView = GameManager.Instance?.CurrentGameView;
+                    if (charView != XRL.UI.Options.StageViewID)
+                    {
+                        throw new ActionRejectedException(409, "not in normal play (screen: " + charView + "); answer the prompt in GET /state first");
+                    }
                     bool details = request.QueryString["details"] == "1";
                     WriteJson(context, 200, GameThread.Invoke(() => Advancement.Describe(details)));
                     return;
