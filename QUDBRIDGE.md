@@ -189,8 +189,9 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
    on a glowfish, counterattacks in the same response). Walking into a neutral swaps places; neither
    `attack` nor `fire` on a neutral asked "really attack?". Verified 2026-10-30 on a croc: `fire` after the
    Busy change (1 turn each, killed it), `travel` interrupted ("You see a croc to the south and stop
-   moving.", 1 turn), `rest` and `wait turns` refused with a popup, no turn used. Still untested:
-   move-to-attack a hostile (the croc died before reaching melee).
+   moving.", 1 turn), `rest` and `wait turns` refused with a popup, no turn used; `move` into a
+   hostile croc attacks it (hit, block and the croc's bite in one response; killed in 2 turns).
+   Crocs submerge and drop out of `creatures` until they surface next to you.
 4. Untested paths (`choose {"dir":...}` on a direction prompt now verified via Shield Slam): `getfrom` on a container
    (Joppa chests are villagers' property, so taking is stealing), trade `offer`, storing into a container.
 5. Ranged combat: `fire {x,y}` and `reload` done (verified 2026-10-30; target passed straight to
