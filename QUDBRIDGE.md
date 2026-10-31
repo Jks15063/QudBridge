@@ -227,7 +227,11 @@ background pins a CPU core). Test character since 2026-10-30: "Iusar Ganuginus",
    (clipped at the bottom edge), view 0, on an action, bad values. The rest of the ~2.3 KB is
    inventory, equipment and lists.
 12. Out-of-view objects aren't listed (remembered cells show terrain only).
-13. Inventory indices shift when inventory changes; stable IDs would need `GameObject.ID` (writes the save).
+13. Done 2026-10-30: inventory/equipped entries carry `id` (`GameObject.BaseID`, the game's own object number;
+   reading it only assigns one from the game's sequence if missing, as the game itself does) and `item` takes
+   that id, for carried or equipped items. Partly used stacks get a new id (SplitStack keeps the old object for
+   the used part). Verified: unequip/equip by id (same id throughout), `slot` still works, bad id `400`,
+   dropping 1 of 2 torches (the rest got a new id), picking it back up (merged into the stack, stack kept its id).
 14. Done 2026-10-30: the "QudBridge active" in-game message is gone (Player.log lines only; the version is
    on `GET /`). Verified after a restart.
 15. Settle's "player ready" probe can fire slightly before all creatures finish their turn in edge cases.

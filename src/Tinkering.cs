@@ -54,11 +54,11 @@ namespace QudBridge
                     var targets = new List<object>();
                     foreach (GameObject item in ModTargets(player, data))
                     {
-                        var loc = Where(player, item);
+                        BodyPart part = player.FindEquippedObject(item);
                         targets.Add(new
                         {
-                            item = loc.Key,
-                            slot = loc.Value,
+                            item = StateBuilder.ItemId(item),
+                            slot = part == null ? null : StateBuilder.Clean(part.GetCardinalDescription()),
                             name = StateBuilder.Clean(item.DisplayName),
                             cost = Cost(ModCost(data, item)),
                         });
@@ -243,18 +243,6 @@ namespace QudBridge
         private static string Name(TinkerData data)
         {
             return StateBuilder.Clean(data.Type == "Build" ? data.LongDisplayName : data.DisplayName);
-        }
-
-        // (inventory index, null) or (null, slot name), as the item actions take them.
-        private static KeyValuePair<int?, string> Where(GameObject player, GameObject item)
-        {
-            int i = player.Inventory?.Objects.IndexOf(item) ?? -1;
-            if (i >= 0)
-            {
-                return new KeyValuePair<int?, string>(i, null);
-            }
-            BodyPart part = player.FindEquippedObject(item);
-            return new KeyValuePair<int?, string>(null, part == null ? null : StateBuilder.Clean(part.GetCardinalDescription()));
         }
 
         private static string NullIfEmpty(string s)

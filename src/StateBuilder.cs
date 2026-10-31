@@ -562,7 +562,7 @@ namespace QudBridge
         }
 
         // Inventory.Objects (XRL.World.Parts/Inventory.cs:21): carried, not equipped. Names as the inventory
-        // screen shows them (XRL.UI/InventoryScreen.cs:421), uncoloured. Index is the position in this list.
+        // screen shows them (XRL.UI/InventoryScreen.cs:421), uncoloured. id is the object's BaseID (see ItemId).
         private static List<object> BuildInventory(GameObject player)
         {
             var list = new List<object>();
@@ -571,11 +571,20 @@ namespace QudBridge
             {
                 return list;
             }
-            for (int i = 0; i < inventory.Objects.Count; i++)
+            foreach (GameObject item in inventory.Objects)
             {
-                list.Add(new { i, name = Clean(inventory.Objects[i].DisplayName) });
+                list.Add(new { id = ItemId(item), name = Clean(item.DisplayName) });
             }
             return list;
+        }
+
+        // GameObject.BaseID (XRL.World/GameObject.cs:400): the game's own per-object number, kept in the save and
+        // unchanged when the inventory is reordered. Reading it assigns one from the game's sequence if the object
+        // has none yet, as the game does whenever it needs to refer to an object. Pooled objects reset it (Clear),
+        // so a destroyed item's id isn't reused.
+        public static int ItemId(GameObject item)
+        {
+            return item.BaseID;
         }
 
         // Body parts with something equipped, slot labelled as on the equipment screen
@@ -592,7 +601,7 @@ namespace QudBridge
             {
                 if (part.Equipped != null && part.IsFirstSlotForEquipped())
                 {
-                    list.Add(new { slot = Clean(part.GetCardinalDescription()), name = Clean(part.Equipped.DisplayName) });
+                    list.Add(new { id = ItemId(part.Equipped), slot = Clean(part.GetCardinalDescription()), name = Clean(part.Equipped.DisplayName) });
                 }
             }
             return list;

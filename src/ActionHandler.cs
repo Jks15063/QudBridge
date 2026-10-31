@@ -573,19 +573,29 @@ namespace QudBridge
             });
         }
 
+        // "item" is an id from state.inventory[].id or state.equipped[].id; "slot" names an equipped slot.
         public static GameObject ResolveItem(GameObject player, JObject body)
         {
             JToken index = body["item"];
             string slot = (string)body["slot"];
             if (index != null && index.Type == JTokenType.Integer)
             {
-                var objects = player.Inventory?.Objects;
-                int i = (int)index;
-                if (objects == null || i < 0 || i >= objects.Count)
+                int id = (int)index;
+                GameObject found = null;
+                Action<GameObject> match = obj =>
                 {
-                    throw new ActionRejectedException(400, "\"item\" " + i + " is not an inventory index (see state.inventory[].i)");
+                    if (found == null && obj.HasID && obj.BaseID == id)
+                    {
+                        found = obj;
+                    }
+                };
+                player.Inventory?.ForeachObject(match);
+                player.Body?.ForeachEquippedObject(match);
+                if (found == null)
+                {
+                    throw new ActionRejectedException(400, "no carried or equipped item with id " + id + " (see state.inventory[].id, state.equipped[].id)");
                 }
-                return objects[i];
+                return found;
             }
             if (slot != null)
             {
@@ -601,7 +611,7 @@ namespace QudBridge
                 }
                 throw new ActionRejectedException(400, "nothing equipped in slot \"" + slot + "\" (see state.equipped[].slot)");
             }
-            throw new ActionRejectedException(400, "give \"item\" (inventory index) or \"slot\" (equipped slot)");
+            throw new ActionRejectedException(400, "give \"item\" (an id from state.inventory[].id or state.equipped[].id) or \"slot\" (equipped slot)");
         }
 
         // Match by InventoryAction.Name ("Eat", "AutoEquip"), then by its menu text ("eat", "equip (auto)").

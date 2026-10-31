@@ -75,8 +75,8 @@ $ curl -s 'http://localhost:15600/state?messages=3'
  "creatures":[{"key":"a","name":"Mehmet","x":42,"y":19,"dist":5,"attitude":"neutral","health":"Perfect"}],
  "items":[{"name":"vinecord","x":35,"y":24,"dist":8}],
  "features":[{"name":"chest","x":30,"y":17},{"name":"table","x":69,"y":18}],
- "inventory":[{"i":0,"name":"waterskin [empty]"},{"i":6,"name":"lead slug x251 PV4 DMG1d2"}],
- "equipped":[{"slot":"Body","name":"woven tunic AV1 DV2"},{"slot":"Right Missile Weapon","name":"chrome revolver PV7 DMG1d6 [lead slug x6]"}],
+ "inventory":[{"id":4127,"name":"waterskin [empty]"},{"id":4133,"name":"lead slug x251 PV4 DMG1d2"}],
+ "equipped":[{"id":4120,"slot":"Body","name":"woven tunic AV1 DV2"},{"id":4122,"slot":"Right Missile Weapon","name":"chrome revolver PV7 DMG1d6 [lead slug x6]"}],
  "messages":["You pass by a door.","You pass by a chest.","You pass by a door."]}
 ```
 
@@ -99,8 +99,12 @@ $ curl -s 'http://localhost:15600/state?messages=3'
   `flying: true` (omitted otherwise) means you can't hit it in melee unless you fly too; use `fire`.
 - `items`: visible items on the ground, nearest first (max 40).
 - `features`: visible furniture, containers and solid objects (max 40).
-- `inventory`: carried items; `i` is the index in this list. `equipped`: one entry per equipped
-  item, labelled by its (first) body slot.
+- `inventory`: carried items. `equipped`: one entry per equipped item, labelled by its (first) body
+  slot. `id` is the game's own number for the object (`GameObject.BaseID`): it stays with the item when
+  the inventory changes, across equipping and unequipping, and across saves. The exception is stacks: using or
+  dropping part of a stack splits it (`Stacker.SplitStack`), and the game keeps the old object for the
+  part that was used, so what's left of the stack has a new id. An item that joins a stack you already
+  carry disappears into it, and the stack keeps its id.
 - Item names spell out stat glyphs: `PV` penetration, `DMG` damage, `AV` armor, `DV` dodge.
 - `messages`: oldest first, colour codes removed; a line may contain `\n`.
 
@@ -191,14 +195,14 @@ read). Build or mod with the `tinker` action, which runs the same game code the 
 $ curl -s http://127.0.0.1:15600/tinkering
 {"skill":"Tinker I","bits":{"scrap":4,"wires":2},
  "build":[{"name":"...","tier":1,"cost":{"scrap":1,"wires":1},"why":"not enough bits"}, ...],
- "mods":[{"name":"...","tier":1,"targets":[{"item":3,"name":"...","cost":{...}},{"slot":"Right Hand","name":"...","cost":{...}}]}, ...]}
+ "mods":[{"name":"...","tier":1,"targets":[{"item":4127,"name":"...","cost":{...}},{"item":4120,"slot":"Right Hand","name":"...","cost":{...}}]}, ...]}
 ```
 
 `skill` is your highest Tinker skill (omitted without one). `bits` and `cost` are by bit name (empty
 bits are omitted). `why` (build recipes only) is the first check that would fail: `needs Tinker II`,
 `missing ingredient`, `not enough bits`; hostiles nearby aren't checked here. `ingredient` is shown when
-a recipe needs one. A mod's `targets` are the inventory (`item`) or equipped (`slot`) items it can go
-on, each with its own cost. Not yet tried with a character that has recipes (the test character has
+a recipe needs one. A mod's `targets` are the carried or equipped items it can go on (`item` is the
+item's id; `slot` is added for equipped ones), each with its own cost. Not yet tried with a character that has recipes (the test character has
 none; it returns `{"bits":{},"build":[],"mods":[]}`).
 
 ## `POST /action`
@@ -235,8 +239,9 @@ Body: a JSON object with a `type` and type-specific fields.
 | `look` | `x`, `y` | what the looker shows for each visible object on that cell (no time passes): returns `look`, a list in the looker's order (creatures first, then terrain and items) of `{name, feeling, difficulty, health, description}`. `feeling` (`Hostile`/`Neutral`/`Friendly`) and `difficulty` (the game's rating relative to you: `Average`, `Tough`, ...) are for creatures. A creature's `description` lists its equipment and physical features. Looking can note a secret or observation, so the result may be a `prompt` (still with `look`). `409` `"you can't see that cell"` or `"there's nothing there to look at"`. For inventory or equipped items use `item` with verb `"look"` (a popup with the item's description and stats) |
 | `choose` | see [Prompts](#prompts) | answers the open popup/menu |
 
-`dir` is one of `N S E W NE NW SE SW`. `item` is an index from `state.inventory[].i`; `slot` is a
-label from `state.equipped[].slot` (e.g. `"Right Hand"`).
+`dir` is one of `N S E W NE NW SE SW`. `item` is an id from `state.inventory[].id` or `state.equipped[].id`
+(`400` if nothing you carry or wear has it); `slot` is a label from `state.equipped[].slot` (e.g.
+`"Right Hand"`).
 
 ```
 $ curl -s -X POST http://localhost:15600/action -d '{"type":"move","dir":"N"}'
@@ -269,7 +274,7 @@ logged more than the last 200 lines, the first entry says how many earlier ones 
 Unknown verbs list what's available:
 
 ```
-$ curl -s -X POST http://localhost:15600/action -d '{"type":"item","item":4,"verb":"juggle"}'
+$ curl -s -X POST http://localhost:15600/action -d '{"type":"item","item":4127,"verb":"juggle"}'
 {"error":"no \"juggle\" action for beetle jerky [3 servings]","available":["drop","equip (auto)","equip (manual)","add notes","mark important","look","eat","show effects"]}
 ```
 
